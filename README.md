@@ -8,6 +8,10 @@ Gostaria de agradecer imensamente ao colega, que muito contribuiu com seu materi
 
 https://how2electronics.com/ecg-monitoring-with-ad8232-ecg-sensor-arduino/
 
+Meu artigo sobre ECG
+https://maurinsoft.com.br/wp/leitor-ecg/
+
+
 
 # English 
 ## ECG
