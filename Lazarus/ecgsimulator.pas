@@ -41,7 +41,7 @@ type
     procedure Start;
     procedure Stop;
     function ReadSample(out ASample: TECGSample): Boolean;
-    function ReadAllSamples(var AList: array of TECGSample; out ACount: Integer): Integer;
+    function ReadAllSamples(var AList: array of TECGSample): Integer;
     function IsRunning: Boolean;
     function GetSampleRate: Double;
     function GetDescription: String;
@@ -144,6 +144,8 @@ begin
       Sample := FOwner.ComputeNextSample(NowMs);
       FOwner.PushSample(Sample);
       NextSampleTime := NextSampleTime + 2; // +2ms = 500 Hz
+      if (NowMs - NextSampleTime) > 60 then
+        NextSampleTime := NowMs + 2;
     end
     else
       Sleep(1);
@@ -431,21 +433,20 @@ begin
   end;
 end;
 
-function TSimulatedECGSource.ReadAllSamples(var AList: array of TECGSample; out ACount: Integer): Integer;
+function TSimulatedECGSource.ReadAllSamples(var AList: array of TECGSample): Integer;
 var
   MaxItems: Integer;
 begin
-  ACount := 0;
+  Result := 0;
   MaxItems := Length(AList);
   FLock.Acquire;
   try
-    while (FQueueHead <> FQueueTail) and (ACount < MaxItems) do
+    while (FQueueHead <> FQueueTail) and (Result < MaxItems) do
     begin
-      AList[ACount] := FQueue[FQueueTail];
+      AList[Result] := FQueue[FQueueTail];
       FQueueTail := (FQueueTail + 1) mod Length(FQueue);
-      Inc(ACount);
+      Inc(Result);
     end;
-    Result := ACount;
   finally
     FLock.Release;
   end;

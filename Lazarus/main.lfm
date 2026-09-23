@@ -322,228 +322,242 @@
             TabStop = True
           end
         end
-        object nbSourceConfig: TNotebook
+        object pnlHardwareConfig: TPanel
           Left = 10
           Height = 180
           Top = 72
           Width = 324
-          PageIndex = 1
+          BevelOuter = bvNone
+          ClientHeight = 180
+          ClientWidth = 324
+          Color = 1775378
+          ParentColor = False
           TabOrder = 1
-          object pageHardware: TPage
-            object gbHardwareConfig: TGroupBox
-              Left = 0
-              Height = 180
-              Top = 0
-              Width = 324
-              Align = alClient
-              Caption = ' CONFIGURACAO SERIAL (AD8232) '
-              ClientHeight = 160
-              ClientWidth = 320
+          Visible = False
+          object gbHardwareConfig: TGroupBox
+            Left = 0
+            Height = 180
+            Top = 0
+            Width = 324
+            Align = alClient
+            Caption = ' CONFIGURACAO SERIAL (AD8232) '
+            ClientHeight = 160
+            ClientWidth = 320
+            Font.Color = clWhite
+            Font.Style = [fsBold]
+            ParentFont = False
+            TabOrder = 0
+            object lblPortHw: TLabel
+              Left = 12
+              Height = 15
+              Top = 8
+              Width = 32
+              Caption = 'Porta:'
               Font.Color = clWhite
-              Font.Style = [fsBold]
+              Font.Style = []
+              ParentColor = False
               ParentFont = False
+            end
+            object cboPortHw: TComboBox
+              Left = 52
+              Height = 23
+              Top = 5
+              Width = 160
+              ItemHeight = 15
+              Style = csDropDownList
               TabOrder = 0
-              object lblPortHw: TLabel
-                Left = 12
-                Height = 15
-                Top = 8
-                Width = 32
-                Caption = 'Porta:'
-                Font.Color = clWhite
-                Font.Style = []
-                ParentColor = False
-                ParentFont = False
-              end
-              object cboPortHw: TComboBox
-                Left = 52
-                Height = 23
-                Top = 5
-                Width = 160
-                ItemHeight = 15
-                Style = csDropDownList
-                TabOrder = 0
-              end
-              object btnRefreshHwPorts: TButton
-                Left = 220
-                Height = 23
-                Top = 5
-                Width = 88
-                Caption = 'Atualizar'
-                OnClick = btnRefreshPortsClick
-                TabOrder = 1
-              end
-              object lblBaudHw: TLabel
-                Left = 12
-                Height = 15
-                Top = 38
-                Width = 30
-                Caption = 'Baud:'
-                Font.Color = clWhite
-                Font.Style = []
-                ParentColor = False
-                ParentFont = False
-              end
-              object cboBaudHw: TComboBox
-                Left = 52
-                Height = 23
-                Top = 35
-                Width = 256
-                ItemHeight = 15
-                ItemIndex = 1
-                Items.Strings = (
-                  '9600'
-                  '115200'
-                )
-                Style = csDropDownList
-                TabOrder = 2
-                Text = '115200'
-              end
-              object btnConnectHw: TButton
-                Left = 12
-                Height = 36
-                Top = 72
-                Width = 296
-                Caption = 'Conectar ao Arduino AD8232'
-                Font.Height = -12
-                Font.Style = [fsBold]
-                OnClick = btnConnectClick
-                ParentFont = False
-                TabOrder = 3
-              end
+            end
+            object btnRefreshHwPorts: TButton
+              Left = 220
+              Height = 23
+              Top = 5
+              Width = 88
+              Caption = 'Atualizar'
+              OnClick = btnRefreshPortsClick
+              TabOrder = 1
+            end
+            object lblBaudHw: TLabel
+              Left = 12
+              Height = 15
+              Top = 38
+              Width = 30
+              Caption = 'Baud:'
+              Font.Color = clWhite
+              Font.Style = []
+              ParentColor = False
+              ParentFont = False
+            end
+            object cboBaudHw: TComboBox
+              Left = 52
+              Height = 23
+              Top = 35
+              Width = 256
+              ItemHeight = 15
+              ItemIndex = 1
+              Items.Strings = (
+                '9600'
+                '115200'
+              )
+              Style = csDropDownList
+              TabOrder = 2
+              Text = '115200'
+            end
+            object btnConnectHw: TButton
+              Left = 12
+              Height = 36
+              Top = 72
+              Width = 296
+              Caption = 'Conectar ao Arduino AD8232'
+              Font.Height = -12
+              Font.Style = [fsBold]
+              OnClick = btnConnectClick
+              ParentFont = False
+              TabOrder = 3
             end
           end
-          object pageSimulation: TPage
-            object gbSimulationConfig: TGroupBox
-              Left = 0
-              Height = 180
-              Top = 0
-              Width = 324
-              Align = alClient
-              Caption = ' PARAMETROS DO SIMULADOR '
-              ClientHeight = 160
-              ClientWidth = 320
-              Font.Color = 65535
-              Font.Style = [fsBold]
+        end
+        object pnlSimulationConfig: TPanel
+          Left = 10
+          Height = 180
+          Top = 72
+          Width = 324
+          BevelOuter = bvNone
+          ClientHeight = 180
+          ClientWidth = 324
+          Color = 1775378
+          ParentColor = False
+          TabOrder = 2
+          Visible = True
+          object gbSimulationConfig: TGroupBox
+            Left = 0
+            Height = 180
+            Top = 0
+            Width = 324
+            Align = alClient
+            Caption = ' PARAMETROS DO SIMULADOR '
+            ClientHeight = 160
+            ClientWidth = 320
+            Font.Color = 65535
+            Font.Style = [fsBold]
+            ParentFont = False
+            TabOrder = 0
+            object lblSimRhythm: TLabel
+              Left = 10
+              Height = 15
+              Top = 4
+              Width = 36
+              Caption = 'Ritmo:'
+              Font.Color = clWhite
+              Font.Style = []
+              ParentColor = False
               ParentFont = False
+            end
+            object cboSimRhythm: TComboBox
+              Left = 52
+              Height = 23
+              Top = 1
+              Width = 256
+              ItemHeight = 15
+              ItemIndex = 0
+              Items.Strings = (
+                'Ritmo Normal (Sinusal)'
+                'Fibrilacao Atrial (AFIB)'
+                'Extrassistole Ventricular (PVC)'
+                'Extrassistole Atrial (PAC)'
+                'Taquicardia Sinusal (130 BPM)'
+                'Bradicardia Sinusal (48 BPM)'
+              )
+              OnChange = cboSimRhythmChange
+              Style = csDropDownList
               TabOrder = 0
-              object lblSimRhythm: TLabel
-                Left = 10
-                Height = 15
-                Top = 4
-                Width = 36
-                Caption = 'Ritmo:'
-                Font.Color = clWhite
-                Font.Style = []
-                ParentColor = False
-                ParentFont = False
-              end
-              object cboSimRhythm: TComboBox
-                Left = 52
-                Height = 23
-                Top = 1
-                Width = 256
-                ItemHeight = 15
-                ItemIndex = 0
-                Items.Strings = (
-                  'Ritmo Normal (Sinusal)'
-                  'Fibrilacao Atrial (AFIB)'
-                  'Extrassistole Ventricular (PVC)'
-                  'Extrassistole Atrial (PAC)'
-                  'Taquicardia Sinusal (130 BPM)'
-                  'Bradicardia Sinusal (48 BPM)'
-                )
-                OnChange = cboSimRhythmChange
-                Style = csDropDownList
-                TabOrder = 0
-                Text = 'Ritmo Normal (Sinusal)'
-              end
-              object lblSimBPM: TLabel
-                Left = 10
-                Height = 15
-                Top = 32
-                Width = 28
-                Caption = 'BPM:'
-                Font.Color = clWhite
-                Font.Style = []
-                ParentColor = False
-                ParentFont = False
-              end
-              object spnSimBPM: TSpinEdit
-                Left = 52
-                Height = 23
-                Top = 29
-                Width = 68
-                MaxValue = 220
-                MinValue = 35
-                OnChange = spnSimBPMChange
-                TabOrder = 1
-                Value = 72
-              end
-              object lblQuality: TLabel
-                Left = 130
-                Height = 15
-                Top = 32
-                Width = 53
-                Caption = 'Qualidade:'
-                Font.Color = clWhite
-                Font.Style = []
-                ParentColor = False
-                ParentFont = False
-              end
-              object cboQuality: TComboBox
-                Left = 188
-                Height = 23
-                Top = 29
-                Width = 120
-                ItemHeight = 15
-                ItemIndex = 1
-                Items.Strings = (
-                  'Excelente'
-                  'Boa'
-                  'Regular'
-                  'Ruim'
-                )
-                OnChange = cboQualityChange
-                Style = csDropDownList
-                TabOrder = 2
-                Text = 'Boa'
-              end
-              object chkPowerLine60Hz: TCheckBox
-                Left = 10
-                Height = 19
-                Top = 60
-                Width = 135
-                Caption = 'Interferencia de 60 Hz'
-                Font.Color = clWhite
-                Font.Style = []
-                OnChange = chkSimControlsChange
-                ParentFont = False
-                TabOrder = 3
-              end
-              object btnStartSimulation: TButton
-                Left = 10
-                Height = 34
-                Top = 86
-                Width = 298
-                Caption = 'Iniciar Simulacao (500 Hz)'
-                Font.Height = -12
-                Font.Style = [fsBold]
-                OnClick = btnConnectClick
-                ParentFont = False
-                TabOrder = 4
-              end
-              object btnGenDataset: TButton
-                Left = 10
-                Height = 26
-                Top = 126
-                Width = 298
-                Caption = '[+] Gerar Dataset Sintetico (CSV/JSON)'
-                Font.Color = clBlack
-                Font.Style = []
-                OnClick = btnGenDatasetClick
-                ParentFont = False
-                TabOrder = 5
-              end
+              Text = 'Ritmo Normal (Sinusal)'
+            end
+            object lblSimBPM: TLabel
+              Left = 10
+              Height = 15
+              Top = 32
+              Width = 28
+              Caption = 'BPM:'
+              Font.Color = clWhite
+              Font.Style = []
+              ParentColor = False
+              ParentFont = False
+            end
+            object spnSimBPM: TSpinEdit
+              Left = 52
+              Height = 23
+              Top = 29
+              Width = 68
+              MaxValue = 220
+              MinValue = 35
+              OnChange = spnSimBPMChange
+              TabOrder = 1
+              Value = 72
+            end
+            object lblQuality: TLabel
+              Left = 130
+              Height = 15
+              Top = 32
+              Width = 53
+              Caption = 'Qualidade:'
+              Font.Color = clWhite
+              Font.Style = []
+              ParentColor = False
+              ParentFont = False
+            end
+            object cboQuality: TComboBox
+              Left = 188
+              Height = 23
+              Top = 29
+              Width = 120
+              ItemHeight = 15
+              ItemIndex = 1
+              Items.Strings = (
+                'Excelente'
+                'Boa'
+                'Regular'
+                'Ruim'
+              )
+              OnChange = cboQualityChange
+              Style = csDropDownList
+              TabOrder = 2
+              Text = 'Boa'
+            end
+            object chkPowerLine60Hz: TCheckBox
+              Left = 10
+              Height = 19
+              Top = 60
+              Width = 135
+              Caption = 'Interferencia de 60 Hz'
+              Font.Color = clWhite
+              Font.Style = []
+              OnChange = chkSimControlsChange
+              ParentFont = False
+              TabOrder = 3
+            end
+            object btnStartSimulation: TButton
+              Left = 10
+              Height = 34
+              Top = 86
+              Width = 298
+              Caption = 'Iniciar Simulacao (500 Hz)'
+              Font.Height = -12
+              Font.Style = [fsBold]
+              OnClick = btnConnectClick
+              ParentFont = False
+              TabOrder = 4
+            end
+            object btnGenDataset: TButton
+              Left = 10
+              Height = 26
+              Top = 126
+              Width = 298
+              Caption = '[+] Gerar Dataset Sintetico (CSV/JSON)'
+              Font.Color = clBlack
+              Font.Style = []
+              OnClick = btnGenDatasetClick
+              ParentFont = False
+              TabOrder = 5
             end
           end
         end

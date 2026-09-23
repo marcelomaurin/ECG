@@ -52,8 +52,7 @@ type
     rbSourceHardware: TRadioButton;
     rbSourceSimulation: TRadioButton;
 
-    nbSourceConfig: TNotebook;
-    pageHardware: TPage;
+    pnlHardwareConfig: TPanel;
     gbHardwareConfig: TGroupBox;
     lblPortHw: TLabel;
     cboPortHw: TComboBox;
@@ -62,7 +61,7 @@ type
     cboBaudHw: TComboBox;
     btnConnectHw: TButton;
 
-    pageSimulation: TPage;
+    pnlSimulationConfig: TPanel;
     gbSimulationConfig: TGroupBox;
     lblSimRhythm: TLabel;
     cboSimRhythm: TComboBox;
@@ -136,6 +135,7 @@ type
     procedure cboSimRhythmChange(Sender: TObject);
     procedure chkSimControlsChange(Sender: TObject);
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
+    procedure GlobalExceptionHandler(Sender: TObject; E: Exception);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure PaintBoxAnalysisPaint(Sender: TObject);
@@ -205,10 +205,27 @@ const
   COLOR_LEADS_OFF = $00FF8800;
   COLOR_PEAK_MARK = $0000E0FF;
 
+procedure TMainForm.GlobalExceptionHandler(Sender: TObject; E: Exception);
+var
+  LogF: TextFile;
+  LogPath: String;
+begin
+  try
+    LogPath := ExtractFilePath(ParamStr(0)) + 'debug.log';
+    AssignFile(LogF, LogPath);
+    if FileExists(LogPath) then Append(LogF) else Rewrite(LogF);
+    WriteLn(LogF, FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) + ' [EXCEPTION] ' + E.ClassName + ': ' + E.Message);
+    CloseFile(LogF);
+  except
+  end;
+  ShowMessage('Erro inesperado: ' + E.ClassName + sLineBreak + E.Message);
+end;
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   ImgPath, DBPath: String;
 begin
+  Application.OnException := @GlobalExceptionHandler;
   FDSP := TECGProcessor.Create(500.0);
   FCurrentSource := nil;
   FSimParams := GetDefaultWaveParameters(rtNormal);
@@ -260,7 +277,8 @@ begin
 
   // Inicializa em modo simulador
   rbSourceSimulation.Checked := True;
-  nbSourceConfig.PageIndex := 1;
+  pnlHardwareConfig.Visible := False;
+  pnlSimulationConfig.Visible := True;
   pnlSimBanner.Visible := True;
 
   PageControlMain.ActivePageIndex := 0;
@@ -295,8 +313,6 @@ end;
 procedure TMainForm.btnGoToStep2Click(Sender: TObject);
 begin
   PageControlMain.ActivePageIndex := 1;
-  if FCurrentSource = nil then
-    StartAcquisition;
 end;
 
 procedure TMainForm.btnGoToStep3Click(Sender: TObject);
@@ -322,16 +338,16 @@ begin
   if (FCurrentSource <> nil) and FCurrentSource.IsRunning then
     StopAcquisition;
 
+  pnlHardwareConfig.Visible := rbSourceHardware.Checked;
+  pnlSimulationConfig.Visible := rbSourceSimulation.Checked;
+  pnlSimBanner.Visible := rbSourceSimulation.Checked;
+
   if rbSourceHardware.Checked then
   begin
-    nbSourceConfig.PageIndex := 0;
-    pnlSimBanner.Visible := False;
     btnConnectHw.Caption := 'Conectar ao Arduino AD8232';
   end
   else
   begin
-    nbSourceConfig.PageIndex := 1;
-    pnlSimBanner.Visible := True;
     btnStartSimulation.Caption := 'Iniciar Simulacao (500 Hz)';
   end;
   UpdateGroundTruthUI;
@@ -498,11 +514,13 @@ var
 begin
   W := Max(100, PaintBoxECG.Width);
   H := Max(100, PaintBoxECG.Height);
-  FBackBuffer.SetSize(W, H);
-  DrawGrid(FBackBuffer.Canvas, W, H);
-  FXPos := 0;
-  FLastY := H div 2;
-  PaintBoxECG.Invalidate;
+  if (FBackBuffer.Width <> W) or (FBackBuffer.Height <> H) then
+  begin
+    FBackBuffer.SetSize(W, H);
+    DrawGrid(FBackBuffer.Canvas, W, H);
+    FXPos := 0;
+    FLastY := H div 2;
+  end;
 end;
 
 procedure TMainForm.InitAnalysisBuffer;
@@ -524,7 +542,11 @@ end;
 
 procedure TMainForm.PaintBoxECGResize(Sender: TObject);
 begin
-  InitBackBuffer;
+  if (PaintBoxECG.Width > 20) and (PaintBoxECG.Height > 20) then
+  begin
+    InitBackBuffer;
+    PaintBoxECG.Invalidate;
+  end;
 end;
 
 procedure TMainForm.PaintBoxAnalysisPaint(Sender: TObject);
@@ -689,7 +711,7 @@ var
 begin
   if FCurrentSource = nil then Exit;
 
-  Count := FCurrentSource.ReadAllSamples(SamplesBuffer, Count);
+  Count := FCurrentSource.ReadAllSamples(SamplesBuffer);
   if Count > 0 then
   begin
     for I := 0 to Count - 1 do
