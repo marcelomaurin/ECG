@@ -1,0 +1,43 @@
+﻿# Configuracao do Modelo YOLO 1D para ECG
+sample_rate: 500              # Taxa de amostragem em Hz
+window_seconds: 10            # Duracao da janela em segundos
+window_samples: 5000          # 500 Hz * 10s = 5000 amostras
+input_channels: 1             # 1 canal (derivacao unica AD8232)
+
+classes:
+  0:
+    code: "N"
+    name: "Batimento Normal"
+    color: "#00E676"
+  1:
+    code: "S"
+    name: "Ectopia Supraventricular"
+    color: "#FF9100"
+  2:
+    code: "V"
+    name: "Ectopia Ventricular (PVC)"
+    color: "#FF1744"
+  3:
+    code: "F"
+    name: "Batimento de Fusao"
+    color: "#D500F9"
+  4:
+    code: "Q"
+    name: "Nao Classificavel / Desconhecido"
+    color: "#FFD600"
+
+num_classes: 5
+
+model:
+  backbone_channels: [32, 64, 128, 256]
+  num_anchors_per_scale: 3
+  # Larguras relativas aproximadas dos complexos QRS em uma janela de 10s
+  anchors: [0.016, 0.028, 0.045] 
+  confidence_threshold: 0.60
+  iou_threshold: 0.35
+
+training:
+  batch_size: 16
+  epochs: 50
+  learning_rate: 0.001
+  weight_decay: 0.0001

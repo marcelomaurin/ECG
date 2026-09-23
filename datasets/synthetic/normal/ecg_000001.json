@@ -1,0 +1,10 @@
+{
+  "source": "simulator",
+  "sample_rate": 500,
+  "duration_seconds": 10,
+  "rhythm": "NORMAL",
+  "class_code": "N",
+  "heart_rate": 71,
+  "noise": 0.02,
+  "baseline_drift": 0.02
+}

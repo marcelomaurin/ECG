@@ -1,0 +1,10 @@
+{
+  "source": "simulator",
+  "sample_rate": 500,
+  "duration_seconds": 10,
+  "rhythm": "AFIB",
+  "class_code": "AFIB",
+  "heart_rate": 97,
+  "noise": 0.06,
+  "baseline_drift": 0.05
+}

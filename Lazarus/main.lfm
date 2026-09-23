@@ -1,0 +1,1066 @@
+﻿object MainForm: TMainForm
+  Left = 140
+  Height = 750
+  Top = 70
+  Width = 1260
+  Caption = 'Maurinsoft ECG Analyzer - Hardware Real & Simulador Didatico'
+  ClientHeight = 750
+  ClientWidth = 1260
+  Color = 1183244
+  OnClose = FormClose
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  Position = poScreenCenter
+  LCLVersion = '2.2.2.0'
+  object pnHeader: TPanel
+    Left = 0
+    Height = 56
+    Top = 0
+    Width = 1260
+    Align = alTop
+    BevelOuter = bvNone
+    ClientHeight = 56
+    ClientWidth = 1260
+    Color = 2366746
+    ParentColor = False
+    TabOrder = 0
+    object lblAppTitle: TLabel
+      Left = 16
+      Height = 25
+      Top = 6
+      Width = 336
+      Caption = 'MAURINSOFT ECG ANALYZER'
+      Font.CharSet = ANSI_CHARSET
+      Font.Color = 65535
+      Font.Height = -21
+      Font.Name = 'Segoe UI'
+      Font.Pitch = fpVariable
+      Font.Quality = fqDraft
+      Font.Style = [fsBold]
+      ParentColor = False
+      ParentFont = False
+    end
+    object lblAppSubtitle: TLabel
+      Left = 16
+      Height = 15
+      Top = 32
+      Width = 478
+      Caption = 'Aquisicao Unificada (Hardware / Simulador) | Armazenamento SQLite | Deteccao YOLO 1D'
+      Font.Color = 10526880
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      ParentColor = False
+      ParentFont = False
+    end
+    object pnlNavButtons: TPanel
+      Left = 740
+      Height = 40
+      Top = 8
+      Width = 504
+      Anchors = [akTop, akRight]
+      BevelOuter = bvNone
+      ClientHeight = 40
+      ClientWidth = 504
+      Color = 2366746
+      ParentColor = False
+      TabOrder = 0
+      object btnNavStep1: TButton
+        Left = 4
+        Height = 32
+        Top = 4
+        Width = 155
+        Caption = '1. Colocacao'
+        Font.Style = [fsBold]
+        OnClick = btnNavStepClick
+        ParentFont = False
+        TabOrder = 0
+      end
+      object btnNavStep2: TButton
+        Left = 165
+        Height = 32
+        Top = 4
+        Width = 165
+        Caption = '2. Monitoramento'
+        Font.Style = [fsBold]
+        OnClick = btnNavStepClick
+        ParentFont = False
+        TabOrder = 1
+      end
+      object btnNavStep3: TButton
+        Left = 336
+        Height = 32
+        Top = 4
+        Width = 160
+        Caption = '3. Analise YOLO 1D'
+        Font.Style = [fsBold]
+        OnClick = btnNavStepClick
+        ParentFont = False
+        TabOrder = 2
+      end
+    end
+  end
+  object PageControlMain: TPageControl
+    Left = 0
+    Height = 671
+    Top = 56
+    Width = 1260
+    ActivePage = tabStep2
+    Align = alClient
+    TabIndex = 1
+    TabOrder = 1
+    object tabStep1: TTabSheet
+      Caption = '1. Colocacao do Equipamento'
+      ClientHeight = 643
+      ClientWidth = 1252
+      object pnStep1Content: TPanel
+        Left = 0
+        Height = 643
+        Top = 0
+        Width = 1252
+        Align = alClient
+        BevelOuter = bvNone
+        ClientHeight = 643
+        ClientWidth = 1252
+        Color = 1183244
+        ParentColor = False
+        TabOrder = 0
+        object pnImageContainer: TPanel
+          Left = 16
+          Height = 611
+          Top = 16
+          Width = 500
+          Anchors = [akTop, akLeft, akBottom]
+          BevelOuter = bvNone
+          ClientHeight = 611
+          ClientWidth = 500
+          Color = 657930
+          ParentColor = False
+          TabOrder = 0
+          object imgElectrodes: TImage
+            Left = 8
+            Height = 595
+            Top = 8
+            Width = 484
+            Align = alClient
+            Proportional = True
+            Stretch = True
+          end
+        end
+        object pnInstructions: TPanel
+          Left = 532
+          Height = 611
+          Top = 16
+          Width = 704
+          Anchors = [akTop, akLeft, akRight, akBottom]
+          BevelOuter = bvNone
+          ClientHeight = 611
+          ClientWidth = 704
+          Color = 1775378
+          ParentColor = False
+          TabOrder = 1
+          object lblStep1Title: TLabel
+            Left = 24
+            Height = 25
+            Top = 16
+            Width = 530
+            Caption = 'ETAPA 1: POSICIONAMENTO DOS ELETRODOS (3 PONTOS)'
+            Font.Color = 65535
+            Font.Height = -19
+            Font.Style = [fsBold]
+            ParentColor = False
+            ParentFont = False
+          end
+          object gbElectrodeGuide: TGroupBox
+            Left = 24
+            Height = 240
+            Top = 56
+            Width = 656
+            Anchors = [akTop, akLeft, akRight]
+            Caption = ' Cores e Localizacao dos Eletrodos '
+            ClientHeight = 218
+            ClientWidth = 652
+            Font.Color = clWhite
+            Font.Style = [fsBold]
+            ParentFont = False
+            TabOrder = 0
+            object lblRA: TLabel
+              Left = 16
+              Height = 45
+              Top = 12
+              Width = 620
+              AutoSize = False
+              Caption = '● VERMELHO (RA): Braco Direito / Regiao Infraclavicular Direita'#13#10'   Fixar logo abaixo da clavicula direita, sobre pele limpa e seca.'
+              Font.Color = 33023
+              Font.Height = -13
+              Font.Style = [fsBold]
+              ParentColor = False
+              ParentFont = False
+            end
+            object lblLA: TLabel
+              Left = 16
+              Height = 45
+              Top = 68
+              Width = 620
+              AutoSize = False
+              Caption = '● AMARELO (LA): Braco Esquerdo / Regiao Infraclavicular Esquerda'#13#10'   Fixar logo abaixo da clavicula esquerda.'
+              Font.Color = 65535
+              Font.Height = -13
+              Font.Style = [fsBold]
+              ParentColor = False
+              ParentFont = False
+            end
+            object lblRL: TLabel
+              Left = 16
+              Height = 45
+              Top = 124
+              Width = 620
+              AutoSize = False
+              Caption = '● VERDE (RL / GND): Referencia / Perna Direita ou Costela Inferior Direita'#13#10'   Eletrodo de aterramento e rejeicao de modo comum (Right Leg Drive).'
+              Font.Color = 65280
+              Font.Height = -13
+              Font.Style = [fsBold]
+              ParentColor = False
+              ParentFont = False
+            end
+          end
+          object gbChecklist: TGroupBox
+            Left = 24
+            Height = 160
+            Top = 312
+            Width = 656
+            Anchors = [akTop, akLeft, akRight]
+            Caption = ' Protocolo de Preparacao e Seguranca '
+            ClientHeight = 138
+            ClientWidth = 652
+            Font.Color = clWhite
+            Font.Style = [fsBold]
+            ParentFont = False
+            TabOrder = 1
+            object lblChecklistText: TLabel
+              Left = 16
+              Height = 100
+              Top = 8
+              Width = 620
+              AutoSize = False
+              Caption = '1. Higienize a regiao dos eletrodos com alcool 70% e aguarde a secagem completa.'#13#10'2. O paciente deve permanecer em repouso absoluto para evitar interferencia muscular (EMG).'#13#10'3. AVISO: Dispositivo experimental e didatico. Nao substitui avaliacao medica.'#13#10'4. Utilize o computador operando em bateria para total isolamento eletrico.'
+              Font.Color = 12632256
+              Font.Height = -12
+              Font.Style = []
+              ParentColor = False
+              ParentFont = False
+            end
+          end
+          object btnGoToStep2: TButton
+            Left = 24
+            Height = 44
+            Top = 526
+            Width = 656
+            Anchors = [akLeft, akRight, akBottom]
+            Caption = 'Eletrodos Posicionados: Avancar para Etapa 2 (Monitoramento) ->'
+            Font.Color = clBlack
+            Font.Height = -14
+            Font.Style = [fsBold]
+            OnClick = btnGoToStep2Click
+            ParentFont = False
+            TabOrder = 2
+          end
+        end
+      end
+    end
+    object tabStep2: TTabSheet
+      Caption = '2. Leitura & Registro (SQLite)'
+      ClientHeight = 643
+      ClientWidth = 1252
+      object pnStep2Right: TPanel
+        Left = 908
+        Height = 643
+        Top = 0
+        Width = 344
+        Align = alRight
+        BevelOuter = bvNone
+        ClientHeight = 643
+        ClientWidth = 344
+        Color = 1775378
+        ParentColor = False
+        TabOrder = 0
+        object gbSourceSelect: TGroupBox
+          Left = 10
+          Height = 65
+          Top = 4
+          Width = 324
+          Caption = ' FONTE DO SINAL '
+          ClientHeight = 45
+          ClientWidth = 320
+          Font.Color = clWhite
+          Font.Style = [fsBold]
+          ParentFont = False
+          TabOrder = 0
+          object rbSourceHardware: TRadioButton
+            Left = 12
+            Height = 19
+            Top = 6
+            Width = 135
+            Caption = 'Dispositivo / Serial'
+            Font.Color = clWhite
+            Font.Style = []
+            OnChange = rbSourceChange
+            ParentFont = False
+            TabOrder = 0
+          end
+          object rbSourceSimulation: TRadioButton
+            Left = 160
+            Height = 19
+            Top = 6
+            Width = 145
+            Caption = 'Simulacao Didatica'
+            Checked = True
+            Font.Color = 65535
+            Font.Style = [fsBold]
+            OnChange = rbSourceChange
+            ParentFont = False
+            TabOrder = 1
+            TabStop = True
+          end
+        end
+        object nbSourceConfig: TNotebook
+          Left = 10
+          Height = 180
+          Top = 72
+          Width = 324
+          PageIndex = 1
+          TabOrder = 1
+          object pageHardware: TPage
+            object gbHardwareConfig: TGroupBox
+              Left = 0
+              Height = 180
+              Top = 0
+              Width = 324
+              Align = alClient
+              Caption = ' CONFIGURACAO SERIAL (AD8232) '
+              ClientHeight = 160
+              ClientWidth = 320
+              Font.Color = clWhite
+              Font.Style = [fsBold]
+              ParentFont = False
+              TabOrder = 0
+              object lblPortHw: TLabel
+                Left = 12
+                Height = 15
+                Top = 8
+                Width = 32
+                Caption = 'Porta:'
+                Font.Color = clWhite
+                Font.Style = []
+                ParentColor = False
+                ParentFont = False
+              end
+              object cboPortHw: TComboBox
+                Left = 52
+                Height = 23
+                Top = 5
+                Width = 160
+                ItemHeight = 15
+                Style = csDropDownList
+                TabOrder = 0
+              end
+              object btnRefreshHwPorts: TButton
+                Left = 220
+                Height = 23
+                Top = 5
+                Width = 88
+                Caption = 'Atualizar'
+                OnClick = btnRefreshPortsClick
+                TabOrder = 1
+              end
+              object lblBaudHw: TLabel
+                Left = 12
+                Height = 15
+                Top = 38
+                Width = 30
+                Caption = 'Baud:'
+                Font.Color = clWhite
+                Font.Style = []
+                ParentColor = False
+                ParentFont = False
+              end
+              object cboBaudHw: TComboBox
+                Left = 52
+                Height = 23
+                Top = 35
+                Width = 256
+                ItemHeight = 15
+                ItemIndex = 1
+                Items.Strings = (
+                  '9600'
+                  '115200'
+                )
+                Style = csDropDownList
+                TabOrder = 2
+                Text = '115200'
+              end
+              object btnConnectHw: TButton
+                Left = 12
+                Height = 36
+                Top = 72
+                Width = 296
+                Caption = 'Conectar ao Arduino AD8232'
+                Font.Height = -12
+                Font.Style = [fsBold]
+                OnClick = btnConnectClick
+                ParentFont = False
+                TabOrder = 3
+              end
+            end
+          end
+          object pageSimulation: TPage
+            object gbSimulationConfig: TGroupBox
+              Left = 0
+              Height = 180
+              Top = 0
+              Width = 324
+              Align = alClient
+              Caption = ' PARAMETROS DO SIMULADOR '
+              ClientHeight = 160
+              ClientWidth = 320
+              Font.Color = 65535
+              Font.Style = [fsBold]
+              ParentFont = False
+              TabOrder = 0
+              object lblSimRhythm: TLabel
+                Left = 10
+                Height = 15
+                Top = 4
+                Width = 36
+                Caption = 'Ritmo:'
+                Font.Color = clWhite
+                Font.Style = []
+                ParentColor = False
+                ParentFont = False
+              end
+              object cboSimRhythm: TComboBox
+                Left = 52
+                Height = 23
+                Top = 1
+                Width = 256
+                ItemHeight = 15
+                ItemIndex = 0
+                Items.Strings = (
+                  'Ritmo Normal (Sinusal)'
+                  'Fibrilacao Atrial (AFIB)'
+                  'Extrassistole Ventricular (PVC)'
+                  'Extrassistole Atrial (PAC)'
+                  'Taquicardia Sinusal (130 BPM)'
+                  'Bradicardia Sinusal (48 BPM)'
+                )
+                OnChange = cboSimRhythmChange
+                Style = csDropDownList
+                TabOrder = 0
+                Text = 'Ritmo Normal (Sinusal)'
+              end
+              object lblSimBPM: TLabel
+                Left = 10
+                Height = 15
+                Top = 32
+                Width = 28
+                Caption = 'BPM:'
+                Font.Color = clWhite
+                Font.Style = []
+                ParentColor = False
+                ParentFont = False
+              end
+              object spnSimBPM: TSpinEdit
+                Left = 52
+                Height = 23
+                Top = 29
+                Width = 68
+                MaxValue = 220
+                MinValue = 35
+                OnChange = spnSimBPMChange
+                TabOrder = 1
+                Value = 72
+              end
+              object lblQuality: TLabel
+                Left = 130
+                Height = 15
+                Top = 32
+                Width = 53
+                Caption = 'Qualidade:'
+                Font.Color = clWhite
+                Font.Style = []
+                ParentColor = False
+                ParentFont = False
+              end
+              object cboQuality: TComboBox
+                Left = 188
+                Height = 23
+                Top = 29
+                Width = 120
+                ItemHeight = 15
+                ItemIndex = 1
+                Items.Strings = (
+                  'Excelente'
+                  'Boa'
+                  'Regular'
+                  'Ruim'
+                )
+                OnChange = cboQualityChange
+                Style = csDropDownList
+                TabOrder = 2
+                Text = 'Boa'
+              end
+              object chkPowerLine60Hz: TCheckBox
+                Left = 10
+                Height = 19
+                Top = 60
+                Width = 135
+                Caption = 'Interferencia de 60 Hz'
+                Font.Color = clWhite
+                Font.Style = []
+                OnChange = chkSimControlsChange
+                ParentFont = False
+                TabOrder = 3
+              end
+              object btnStartSimulation: TButton
+                Left = 10
+                Height = 34
+                Top = 86
+                Width = 298
+                Caption = 'Iniciar Simulacao (500 Hz)'
+                Font.Height = -12
+                Font.Style = [fsBold]
+                OnClick = btnConnectClick
+                ParentFont = False
+                TabOrder = 4
+              end
+              object btnGenDataset: TButton
+                Left = 10
+                Height = 26
+                Top = 126
+                Width = 298
+                Caption = '[+] Gerar Dataset Sintetico (CSV/JSON)'
+                Font.Color = clBlack
+                Font.Style = []
+                OnClick = btnGenDatasetClick
+                ParentFont = False
+                TabOrder = 5
+              end
+            end
+          end
+        end
+        object gbBPMStep2: TGroupBox
+          Left = 10
+          Height = 90
+          Top = 256
+          Width = 324
+          Caption = ' FREQUENCIA CARDIACA (BPM) '
+          ClientHeight = 70
+          ClientWidth = 320
+          Font.Color = clWhite
+          Font.Style = [fsBold]
+          ParentFont = False
+          TabOrder = 2
+          object lblBPMValue2: TLabel
+            Left = 16
+            Height = 48
+            Top = 0
+            Width = 63
+            Caption = '--'
+            Font.Color = 65280
+            Font.Height = -48
+            Font.Name = 'Consolas'
+            Font.Style = [fsBold]
+            ParentColor = False
+            ParentFont = False
+          end
+          object lblBPMUnit2: TLabel
+            Left = 90
+            Height = 15
+            Top = 24
+            Width = 26
+            Caption = 'BPM'
+            Font.Color = 10526880
+            Font.Height = -12
+            ParentColor = False
+            ParentFont = False
+          end
+          object lblHeartStatus2: TLabel
+            Left = 130
+            Height = 17
+            Top = 10
+            Width = 148
+            Caption = 'Aguardando Aquisicao...'
+            Font.Color = 65535
+            Font.Height = -13
+            ParentColor = False
+            ParentFont = False
+          end
+          object lblSourceDesc: TLabel
+            Left = 130
+            Height = 15
+            Top = 32
+            Width = 170
+            AutoSize = False
+            Caption = 'Fonte: Ociosa'
+            Font.Color = 12632256
+            Font.Height = -11
+            ParentColor = False
+            ParentFont = False
+          end
+        end
+        object gbSQLiteRecord: TGroupBox
+          Left = 10
+          Height = 150
+          Top = 350
+          Width = 324
+          Caption = ' REGISTRO EM BANCO SQLITE '
+          ClientHeight = 130
+          ClientWidth = 320
+          Font.Color = clWhite
+          Font.Style = [fsBold]
+          ParentFont = False
+          TabOrder = 3
+          object lblPatient: TLabel
+            Left = 10
+            Height = 15
+            Top = 4
+            Width = 49
+            Caption = 'Paciente:'
+            Font.Color = clWhite
+            Font.Style = []
+            ParentColor = False
+            ParentFont = False
+          end
+          object edtPatient: TEdit
+            Left = 64
+            Height = 23
+            Top = 1
+            Width = 244
+            TabOrder = 0
+            Text = 'Paciente Teste'
+          end
+          object btnRecordToggle: TButton
+            Left = 10
+            Height = 32
+            Top = 28
+            Width = 298
+            Caption = '[o] Iniciar Gravacao (10s)'
+            Font.Color = clRed
+            Font.Height = -12
+            Font.Style = [fsBold]
+            OnClick = btnRecordToggleClick
+            ParentFont = False
+            TabOrder = 1
+          end
+          object lblRecordStatus: TLabel
+            Left = 10
+            Height = 17
+            Top = 64
+            Width = 298
+            Alignment = taCenter
+            AutoSize = False
+            Caption = 'Gravador Ocioso'
+            Font.Color = 65535
+            Font.Height = -12
+            ParentColor = False
+            ParentFont = False
+          end
+          object pbRecordProgress: TProgressBar
+            Left = 10
+            Height = 14
+            Top = 86
+            Width = 298
+            Max = 100
+            TabOrder = 2
+          end
+          object lblDBFile: TLabel
+            Left = 10
+            Height = 15
+            Top = 106
+            Width = 298
+            Alignment = taCenter
+            AutoSize = False
+            Caption = 'Banco: ecg_records.db (SQLite 3)'
+            Font.Color = 8421504
+            Font.Height = -11
+            ParentColor = False
+            ParentFont = False
+          end
+        end
+        object gbStageNav: TGroupBox
+          Left = 10
+          Height = 130
+          Top = 504
+          Width = 324
+          Caption = ' PAINEL GROUND TRUTH / VALIDACAO '
+          ClientHeight = 110
+          ClientWidth = 320
+          Font.Color = 65535
+          Font.Style = [fsBold]
+          ParentFont = False
+          TabOrder = 4
+          object lblGTGenerated: TLabel
+            Left = 10
+            Height = 15
+            Top = 6
+            Width = 298
+            AutoSize = False
+            Caption = 'Ritmo Gerado: NORMAL (Sinusal)'
+            Font.Color = clWhite
+            Font.Height = -11
+            Font.Style = [fsBold]
+            ParentColor = False
+            ParentFont = False
+          end
+          object lblGTDetected: TLabel
+            Left = 10
+            Height = 15
+            Top = 26
+            Width = 298
+            AutoSize = False
+            Caption = 'Detecao Classica: NORMAL | YOLO 1D: Normal'
+            Font.Color = 65280
+            Font.Height = -11
+            ParentColor = False
+            ParentFont = False
+          end
+          object lblGTStatus: TLabel
+            Left = 10
+            Height = 15
+            Top = 46
+            Width = 298
+            AutoSize = False
+            Caption = 'Resultado Ground Truth: CORRETO [OK]'
+            Font.Color = 65535
+            Font.Height = -11
+            Font.Style = [fsBold]
+            ParentColor = False
+            ParentFont = False
+          end
+          object btnGoToStep3: TButton
+            Left = 10
+            Height = 30
+            Top = 68
+            Width = 298
+            Caption = 'Avancar para Analise YOLO 1D ->'
+            Font.Color = clBlack
+            Font.Height = -11
+            Font.Style = [fsBold]
+            OnClick = btnGoToStep3Click
+            ParentFont = False
+            TabOrder = 0
+          end
+        end
+      end
+      object pnStep2Center: TPanel
+        Left = 0
+        Height = 643
+        Top = 0
+        Width = 908
+        Align = alClient
+        BevelOuter = bvNone
+        ClientHeight = 643
+        ClientWidth = 908
+        Color = 657930
+        ParentColor = False
+        TabOrder = 1
+        object pnlSimBanner: TPanel
+          Left = 0
+          Height = 28
+          Top = 0
+          Width = 908
+          Align = alTop
+          BevelOuter = bvNone
+          Caption = 'MODO DE SIMULACAO ATIVO - SINAL SINTETICO DIDATICO (NAO REPRESENTA UM PACIENTE)'
+          Color = 33023
+          Font.Color = clBlack
+          Font.Height = -12
+          Font.Style = [fsBold]
+          ParentColor = False
+          ParentFont = False
+          TabOrder = 0
+        end
+        object PaintBoxECG: TPaintBox
+          Left = 0
+          Height = 615
+          Top = 28
+          Width = 908
+          Align = alClient
+          OnPaint = PaintBoxECGPaint
+          OnResize = PaintBoxECGResize
+        end
+      end
+    end
+    object tabStep3: TTabSheet
+      Caption = '3. Analise do Sinal (YOLO 1D)'
+      ClientHeight = 643
+      ClientWidth = 1252
+      object pnStep3Top: TPanel
+        Left = 0
+        Height = 48
+        Top = 0
+        Width = 1252
+        Align = alTop
+        BevelOuter = bvNone
+        ClientHeight = 48
+        ClientWidth = 1252
+        Color = 2366746
+        ParentColor = False
+        TabOrder = 0
+        object lblExamInfo: TLabel
+          Left = 16
+          Height = 17
+          Top = 14
+          Width = 520
+          Caption = 'Exame #1 | Janela de 10.0s (5000 amostras a 500 Hz) | Gravado no SQLite'
+          Font.Color = 65535
+          Font.Height = -13
+          Font.Style = [fsBold]
+          ParentColor = False
+          ParentFont = False
+        end
+        object btnRunYOLO: TButton
+          Left = 732
+          Height = 30
+          Top = 9
+          Width = 176
+          Anchors = [akTop, akRight]
+          Caption = '> Executar YOLO 1D'
+          Font.Style = [fsBold]
+          OnClick = btnRunYOLOClick
+          ParentFont = False
+          TabOrder = 0
+        end
+        object btnRunPython: TButton
+          Left = 916
+          Height = 30
+          Top = 9
+          Width = 180
+          Anchors = [akTop, akRight]
+          Caption = 'Inferencia PyTorch (Python)'
+          Font.Style = []
+          OnClick = btnRunPythonClick
+          ParentFont = False
+          TabOrder = 1
+        end
+        object btnNewExam: TButton
+          Left = 1104
+          Height = 30
+          Top = 9
+          Width = 136
+          Anchors = [akTop, akRight]
+          Caption = 'Novo Exame ->'
+          Font.Style = [fsBold]
+          OnClick = btnNewExamClick
+          ParentFont = False
+          TabOrder = 2
+        end
+      end
+      object pnStep3Client: TPanel
+        Left = 0
+        Height = 595
+        Top = 48
+        Width = 1252
+        Align = alClient
+        BevelOuter = bvNone
+        ClientHeight = 595
+        ClientWidth = 1252
+        Color = 1183244
+        ParentColor = False
+        TabOrder = 1
+        object pnAnalysisGraphContainer: TPanel
+          Left = 0
+          Height = 300
+          Top = 0
+          Width = 1252
+          Align = alTop
+          BevelOuter = bvNone
+          ClientHeight = 300
+          ClientWidth = 1252
+          Color = 657930
+          ParentColor = False
+          TabOrder = 0
+          object PaintBoxAnalysis: TPaintBox
+            Left = 0
+            Height = 300
+            Top = 0
+            Width = 1252
+            Align = alClient
+            OnPaint = PaintBoxAnalysisPaint
+            OnResize = PaintBoxAnalysisResize
+          end
+        end
+        object pnAnalysisBottom: TPanel
+          Left = 0
+          Height = 295
+          Top = 300
+          Width = 1252
+          Align = alClient
+          BevelOuter = bvNone
+          ClientHeight = 295
+          ClientWidth = 1252
+          Color = 1775378
+          ParentColor = False
+          TabOrder = 1
+          object GridEvents: TStringGrid
+            Left = 8
+            Height = 279
+            Top = 8
+            Width = 892
+            Align = alClient
+            BorderSpacing.Around = 8
+            Color = 657930
+            ColCount = 7
+            DefaultColWidth = 120
+            DefaultRowHeight = 24
+            FixedCols = 0
+            Font.Color = clWhite
+            Font.Height = -12
+            Font.Name = 'Segoe UI'
+            Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect, goSmoothScroll]
+            ParentFont = False
+            RowCount = 1
+            TabOrder = 0
+          end
+          object pnSummaryCards: TPanel
+            Left = 908
+            Height = 295
+            Top = 0
+            Width = 344
+            Align = alRight
+            BevelOuter = bvNone
+            ClientHeight = 295
+            ClientWidth = 344
+            Color = 1775378
+            ParentColor = False
+            TabOrder = 1
+            object gbYOLOSummary: TGroupBox
+              Left = 8
+              Height = 279
+              Top = 8
+              Width = 328
+              Align = alClient
+              BorderSpacing.Around = 8
+              Caption = ' RESUMO DIAGNOSTICO YOLO 1D '
+              ClientHeight = 259
+              ClientWidth = 324
+              Font.Color = clWhite
+              Font.Style = [fsBold]
+              ParentFont = False
+              TabOrder = 0
+              object lblTotalEventsVal: TLabel
+                Left = 16
+                Height = 21
+                Top = 16
+                Width = 280
+                AutoSize = False
+                Caption = '● Total de Batimentos: 0'
+                Font.Color = clWhite
+                Font.Height = -13
+                Font.Style = [fsBold]
+                ParentColor = False
+                ParentFont = False
+              end
+              object lblNormalEventsVal: TLabel
+                Left = 16
+                Height = 21
+                Top = 48
+                Width = 280
+                AutoSize = False
+                Caption = '● Normais (Classe N): 0'
+                Font.Color = 65280
+                Font.Height = -13
+                Font.Style = [fsBold]
+                ParentColor = False
+                ParentFont = False
+              end
+              object lblPVCEventsVal: TLabel
+                Left = 16
+                Height = 21
+                Top = 80
+                Width = 280
+                AutoSize = False
+                Caption = '● Ventriculares (PVC / V): 0'
+                Font.Color = 255
+                Font.Height = -13
+                Font.Style = [fsBold]
+                ParentColor = False
+                ParentFont = False
+              end
+              object lblArrhythmiaVal: TLabel
+                Left = 16
+                Height = 21
+                Top = 112
+                Width = 280
+                AutoSize = False
+                Caption = '● Carga Arritmica: 0.0%'
+                Font.Color = 65535
+                Font.Height = -13
+                Font.Style = [fsBold]
+                ParentColor = False
+                ParentFont = False
+              end
+              object lblYOLONote: TLabel
+                Left = 16
+                Height = 55
+                Top = 145
+                Width = 290
+                AutoSize = False
+                Caption = 'Caixas delimitadoras temporais 1D identificam inicio e fim exatos de cada complexo QRS sem segmentacao previa.'
+                Font.Color = 10526880
+                Font.Height = -11
+                Font.Style = []
+                ParentColor = False
+                ParentFont = False
+                WordWrap = True
+              end
+              object btnExportAnalysisCSV: TButton
+                Left = 16
+                Height = 30
+                Top = 215
+                Width = 290
+                Caption = 'Exportar Eventos YOLO (CSV)'
+                OnClick = btnExportAnalysisCSVClick
+                TabOrder = 0
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  object StatusBar1: TStatusBar
+    Left = 0
+    Height = 23
+    Top = 727
+    Width = 1260
+    Panels = <    
+      item
+        Text = 'Status: Ocioso'
+        Width = 200
+      end    
+      item
+        Text = 'Modo: Simulador Didatico'
+        Width = 240
+      end    
+      item
+        Text = 'Banco: SQLite Conectado'
+        Width = 220
+      end    
+      item
+        Text = 'Maurinsoft ECG Analyzer'
+        Width = 300
+      end>
+    SimplePanel = False
+  end
+  object TimerUI: TTimer
+    Enabled = False
+    Interval = 25
+    OnTimer = TimerUITimer
+    Left = 32
+    Top = 80
+  end
+  object SaveDialog1: TSaveDialog
+    Left = 96
+    Top = 80
+  end
+end

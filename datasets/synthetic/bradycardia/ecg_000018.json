@@ -1,0 +1,10 @@
+{
+  "source": "simulator",
+  "sample_rate": 500,
+  "duration_seconds": 10,
+  "rhythm": "BRADYCARDIA",
+  "class_code": "BRADY",
+  "heart_rate": 45,
+  "noise": 0.02,
+  "baseline_drift": 0.02
+}

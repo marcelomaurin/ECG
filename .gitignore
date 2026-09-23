@@ -1,0 +1,39 @@
+﻿# Free Pascal & Lazarus
+*.exe
+*.o
+*.ppu
+*.or
+*.a
+*.bak
+*.lps
+*.identcache
+*.stat
+lib/
+backup/
+Lazarus/lib/
+Lazarus/backup/
+
+# SQLite databases & temp files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+env/
+venv/
+.venv/
+
+# Large model checkpoints
+models/ecg_yolo/*.pt
+models/ecg_yolo/*.pth
+
+# OS generated
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store

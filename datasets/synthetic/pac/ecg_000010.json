@@ -1,0 +1,10 @@
+{
+  "source": "simulator",
+  "sample_rate": 500,
+  "duration_seconds": 10,
+  "rhythm": "PAC",
+  "class_code": "PAC",
+  "heart_rate": 81,
+  "noise": 0.03,
+  "baseline_drift": 0.03
+}
