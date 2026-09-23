@@ -1,12 +1,12 @@
-﻿unit ecgdatabase;
+unit ecgdatabase;
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, sqldb, sqlite3conn, sqlite3dyn, DB,
-  ecgtypes, ecgsource;
+  Classes, SysUtils, syncobjs, sqldb, sqlite3conn, sqlite3dyn, DB,
+  ecgsource;
 
 type
   { TECGDatabase }
@@ -17,6 +17,7 @@ type
     FDBPath: String;
     FCurrentExamId: Int64;
     FIsOpen: Boolean;
+    FLock: TCriticalSection;
 
     procedure CreateTables;
   public
@@ -45,6 +46,7 @@ begin
   FDBPath := ADBPath;
   FIsOpen := False;
   FCurrentExamId := 0;
+  FLock := TCriticalSection.Create;
 
   // Localiza a biblioteca sqlite3.dll na mesma pasta do executavel
   SQLiteDefaultLibrary := ExtractFilePath(ParamStr(0)) + 'sqlite3.dll';
@@ -62,27 +64,39 @@ begin
   Close;
   FTrans.Free;
   FConn.Free;
+  FLock.Free;
   inherited Destroy;
 end;
 
 procedure TECGDatabase.Open;
 begin
   if FIsOpen then Exit;
+  FLock.Acquire;
   try
-    FConn.Open;
-    FTrans.Active := True;
-    CreateTables;
-    FIsOpen := True;
-  except
-    on E: Exception do
-      FIsOpen := False;
+    try
+      FConn.Open;
+      FTrans.StartTransaction;
+      CreateTables;
+      FTrans.CommitRetaining;
+      FIsOpen := True;
+    except
+      on E: Exception do
+      begin
+        if FTrans.Active then
+          try FTrans.Rollback; except end;
+        FIsOpen := False;
+      end;
+    end;
+  finally
+    FLock.Release;
   end;
 end;
 
 procedure TECGDatabase.Close;
 begin
-  if FIsOpen then
-  begin
+  if not FIsOpen then Exit;
+  FLock.Acquire;
+  try
     try
       if FTrans.Active then
         FTrans.Commit;
@@ -90,6 +104,8 @@ begin
     except
     end;
     FIsOpen := False;
+  finally
+    FLock.Release;
   end;
 end;
 
@@ -99,11 +115,11 @@ begin
     'CREATE TABLE IF NOT EXISTS exames (' +
     '  id INTEGER PRIMARY KEY AUTOINCREMENT,' +
     '  data_hora TEXT NOT NULL,' +
-    '  duracao_seg REAL DEFAULT 0,' +
     '  taxa_amostragem INTEGER DEFAULT 500,' +
-    '  bpm_medio REAL DEFAULT 0,' +
-    '  paciente TEXT DEFAULT ''Anonimo'',' +
-    '  notas TEXT' +
+    '  duracao_seg REAL DEFAULT 0.0,' +
+    '  paciente TEXT,' +
+    '  notas TEXT,' +
+    '  bpm_medio REAL DEFAULT 0.0' +
     ');'
   );
 
@@ -115,8 +131,7 @@ begin
     '  raw_adc REAL NOT NULL,' +
     '  filtered_val REAL NOT NULL,' +
     '  lead_off INTEGER DEFAULT 0,' +
-    '  r_peak INTEGER DEFAULT 0,' +
-    '  FOREIGN KEY (exame_id) REFERENCES exames(id)' +
+    '  r_peak INTEGER DEFAULT 0' +
     ');'
   );
 
@@ -124,19 +139,21 @@ begin
     'CREATE TABLE IF NOT EXISTS eventos_yolo (' +
     '  id INTEGER PRIMARY KEY AUTOINCREMENT,' +
     '  exame_id INTEGER NOT NULL,' +
-    '  inicio_s REAL NOT NULL,' +
-    '  fim_s REAL NOT NULL,' +
-    '  duracao_ms REAL NOT NULL,' +
-    '  class_id INTEGER NOT NULL,' +
+    '  start_s REAL NOT NULL,' +
+    '  end_s REAL NOT NULL,' +
+    '  duration_ms REAL NOT NULL,' +
     '  class_code TEXT NOT NULL,' +
     '  class_name TEXT NOT NULL,' +
-    '  confianca REAL NOT NULL,' +
-    '  cor_hex TEXT,' +
-    '  FOREIGN KEY (exame_id) REFERENCES exames(id)' +
+    '  confidence REAL NOT NULL' +
     ');'
   );
 
-  FTrans.CommitRetaining;
+  FConn.ExecuteDirect('CREATE INDEX IF NOT EXISTS idx_amostras_exame ON amostras(exame_id);');
+  FConn.ExecuteDirect('CREATE INDEX IF NOT EXISTS idx_eventos_exame ON eventos_yolo(exame_id);');
+
+  // PRAGMAs para desempenho maximo e concorrencia segura no SQLite
+  try FConn.ExecuteDirect('PRAGMA journal_mode = WAL;'); except end;
+  try FConn.ExecuteDirect('PRAGMA synchronous = NORMAL;'); except end;
 end;
 
 function TECGDatabase.StartExam(const APaciente: String; const ANotas: String): Int64;
@@ -148,28 +165,44 @@ begin
   if not FIsOpen then Open;
   if not FIsOpen then Exit;
 
-  DataHoraStr := FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
-  Q := TSQLQuery.Create(nil);
+  FLock.Acquire;
   try
-    Q.DataBase := FConn;
-    Q.Transaction := FTrans;
-    Q.SQL.Text := 'INSERT INTO exames (data_hora, taxa_amostragem, paciente, notas) ' +
-                  'VALUES (:data_hora, 500, :paciente, :notas);';
-    Q.Params.ParamByName('data_hora').AsString := DataHoraStr;
-    Q.Params.ParamByName('paciente').AsString := APaciente;
-    Q.Params.ParamByName('notas').AsString := ANotas;
-    Q.ExecSQL;
-    FTrans.CommitRetaining;
+    try
+      if not FTrans.Active then
+        FTrans.StartTransaction;
 
-    Q.SQL.Text := 'SELECT last_insert_rowid() AS last_id;';
-    Q.Open;
-    if not Q.EOF then
-      Result := Q.FieldByName('last_id').AsLargeInt;
-    Q.Close;
+      DataHoraStr := FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
+      Q := TSQLQuery.Create(nil);
+      try
+        Q.DataBase := FConn;
+        Q.Transaction := FTrans;
+        Q.SQL.Text := 'INSERT INTO exames (data_hora, taxa_amostragem, paciente, notas) ' +
+                      'VALUES (:data_hora, 500, :paciente, :notas);';
+        Q.Params.ParamByName('data_hora').AsString := DataHoraStr;
+        Q.Params.ParamByName('paciente').AsString := APaciente;
+        Q.Params.ParamByName('notas').AsString := ANotas;
+        Q.ExecSQL;
+        FTrans.CommitRetaining;
 
-    FCurrentExamId := Result;
+        Q.SQL.Text := 'SELECT last_insert_rowid() AS last_id;';
+        Q.Open;
+        if not Q.EOF then
+          Result := Q.FieldByName('last_id').AsLargeInt;
+        Q.Close;
+
+        FCurrentExamId := Result;
+      finally
+        Q.Free;
+      end;
+    except
+      on E: Exception do
+      begin
+        if FTrans.Active then
+          try FTrans.Rollback; except end;
+      end;
+    end;
   finally
-    Q.Free;
+    FLock.Release;
   end;
 end;
 
@@ -179,18 +212,34 @@ var
 begin
   if (AExamId <= 0) or not FIsOpen then Exit;
 
-  Q := TSQLQuery.Create(nil);
+  FLock.Acquire;
   try
-    Q.DataBase := FConn;
-    Q.Transaction := FTrans;
-    Q.SQL.Text := 'UPDATE exames SET duracao_seg = :duracao, bpm_medio = :bpm WHERE id = :id;';
-    Q.Params.ParamByName('duracao').AsFloat := ADuracaoSeg;
-    Q.Params.ParamByName('bpm').AsFloat := ABpmMedio;
-    Q.Params.ParamByName('id').AsLargeInt := AExamId;
-    Q.ExecSQL;
-    FTrans.CommitRetaining;
+    try
+      if not FTrans.Active then
+        FTrans.StartTransaction;
+
+      Q := TSQLQuery.Create(nil);
+      try
+        Q.DataBase := FConn;
+        Q.Transaction := FTrans;
+        Q.SQL.Text := 'UPDATE exames SET duracao_seg = :duracao, bpm_medio = :bpm WHERE id = :id;';
+        Q.Params.ParamByName('duracao').AsFloat := ADuracaoSeg;
+        Q.Params.ParamByName('bpm').AsFloat := ABpmMedio;
+        Q.Params.ParamByName('id').AsLargeInt := AExamId;
+        Q.ExecSQL;
+        FTrans.CommitRetaining;
+      finally
+        Q.Free;
+      end;
+    except
+      on E: Exception do
+      begin
+        if FTrans.Active then
+          try FTrans.Rollback; except end;
+      end;
+    end;
   finally
-    Q.Free;
+    FLock.Release;
   end;
 end;
 
@@ -201,31 +250,42 @@ var
 begin
   if (AExamId <= 0) or (ACount <= 0) or not FIsOpen then Exit;
 
-  Q := TSQLQuery.Create(nil);
+  FLock.Acquire;
   try
-    Q.DataBase := FConn;
-    Q.Transaction := FTrans;
     try
-      FConn.ExecuteDirect('BEGIN TRANSACTION;');
-      Q.SQL.Text := 'INSERT INTO amostras (exame_id, timestamp_us, raw_adc, filtered_val, lead_off, r_peak) ' +
-                    'VALUES (:exame_id, :timestamp_us, :raw_adc, :filtered_val, :lead_off, :r_peak);';
+      if not FTrans.Active then
+        FTrans.StartTransaction;
 
-      for I := 0 to ACount - 1 do
-      begin
-        Q.Params.ParamByName('exame_id').AsLargeInt := AExamId;
-        Q.Params.ParamByName('timestamp_us').AsLargeInt := ASamples[I].TimestampUS;
-        Q.Params.ParamByName('raw_adc').AsFloat := ASamples[I].RawValue;
-        Q.Params.ParamByName('filtered_val').AsFloat := ASamples[I].FilteredValue;
-        Q.Params.ParamByName('lead_off').AsInteger := Ord(ASamples[I].LeadOff);
-        Q.Params.ParamByName('r_peak').AsInteger := Ord(ASamples[I].IsPeak);
-        Q.ExecSQL;
+      Q := TSQLQuery.Create(nil);
+      try
+        Q.DataBase := FConn;
+        Q.Transaction := FTrans;
+        Q.SQL.Text := 'INSERT INTO amostras (exame_id, timestamp_us, raw_adc, filtered_val, lead_off, r_peak) ' +
+                      'VALUES (:exame_id, :timestamp_us, :raw_adc, :filtered_val, :lead_off, :r_peak);';
+
+        for I := 0 to ACount - 1 do
+        begin
+          Q.Params.ParamByName('exame_id').AsLargeInt := AExamId;
+          Q.Params.ParamByName('timestamp_us').AsLargeInt := ASamples[I].TimestampUS;
+          Q.Params.ParamByName('raw_adc').AsFloat := ASamples[I].RawValue;
+          Q.Params.ParamByName('filtered_val').AsFloat := ASamples[I].FilteredValue;
+          Q.Params.ParamByName('lead_off').AsInteger := Ord(ASamples[I].LeadOff);
+          Q.Params.ParamByName('r_peak').AsInteger := Ord(ASamples[I].IsPeak);
+          Q.ExecSQL;
+        end;
+        FTrans.CommitRetaining;
+      finally
+        Q.Free;
       end;
-      FConn.ExecuteDirect('COMMIT;');
     except
-      try FConn.ExecuteDirect('ROLLBACK;'); except end;
+      on E: Exception do
+      begin
+        if FTrans.Active then
+          try FTrans.Rollback; except end;
+      end;
     end;
   finally
-    Q.Free;
+    FLock.Release;
   end;
 end;
 
@@ -239,25 +299,40 @@ begin
   MaxSamples := Length(ASamples);
   if (AExamId <= 0) or not FIsOpen then Exit;
 
-  Q := TSQLQuery.Create(nil);
+  FLock.Acquire;
   try
-    Q.DataBase := FConn;
-    Q.Transaction := FTrans;
-    Q.SQL.Text := 'SELECT filtered_val FROM amostras WHERE exame_id = :id ORDER BY id ASC LIMIT :max_s;';
-    Q.Params.ParamByName('id').AsLargeInt := AExamId;
-    Q.Params.ParamByName('max_s').AsInteger := MaxSamples;
-    Q.Open;
+    try
+      if not FTrans.Active then
+        FTrans.StartTransaction;
 
-    while not Q.EOF and (ACount < MaxSamples) do
-    begin
-      ASamples[ACount] := Q.FieldByName('filtered_val').AsFloat;
-      Inc(ACount);
-      Q.Next;
+      Q := TSQLQuery.Create(nil);
+      try
+        Q.DataBase := FConn;
+        Q.Transaction := FTrans;
+        Q.SQL.Text := 'SELECT filtered_val FROM amostras WHERE exame_id = :id ORDER BY id ASC LIMIT :max_s;';
+        Q.Params.ParamByName('id').AsLargeInt := AExamId;
+        Q.Params.ParamByName('max_s').AsInteger := MaxSamples;
+        Q.Open;
+        while not Q.EOF and (ACount < MaxSamples) do
+        begin
+          ASamples[ACount] := Q.FieldByName('filtered_val').AsFloat;
+          Inc(ACount);
+          Q.Next;
+        end;
+        Q.Close;
+        Result := (ACount > 0);
+      finally
+        Q.Free;
+      end;
+    except
+      on E: Exception do
+      begin
+        if FTrans.Active then
+          try FTrans.Rollback; except end;
+      end;
     end;
-    Q.Close;
-    Result := (ACount > 0);
   finally
-    Q.Free;
+    FLock.Release;
   end;
 end;
 

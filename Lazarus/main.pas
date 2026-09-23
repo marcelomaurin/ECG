@@ -951,7 +951,12 @@ begin
   AvgBPM := FDSP.CurrentBPM;
   if AvgBPM <= 0 then AvgBPM := 72.0;
 
-  FDatabase.FinishExam(FRecordedExamId, DurSec, AvgBPM);
+  try
+    FDatabase.FinishExam(FRecordedExamId, DurSec, AvgBPM);
+  except
+    on E: Exception do
+      lblRecordStatus.Caption := 'Aviso ao salvar exame: ' + E.Message;
+  end;
 
   btnRecordToggle.Caption := '[o] Iniciar Gravacao (10s)';
   btnRecordToggle.Font.Color := clRed;
