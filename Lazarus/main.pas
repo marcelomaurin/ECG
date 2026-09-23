@@ -49,11 +49,15 @@ type
 
     pnStep2Right: TPanel;
     gbSourceSelect: TGroupBox;
+    lblTitleSource: TLabel;
     rbSourceHardware: TRadioButton;
+    lblSourceHw: TLabel;
     rbSourceSimulation: TRadioButton;
+    lblSourceSim: TLabel;
 
     pnlHardwareConfig: TPanel;
     gbHardwareConfig: TGroupBox;
+    lblTitleHw: TLabel;
     lblPortHw: TLabel;
     cboPortHw: TComboBox;
     btnRefreshHwPorts: TButton;
@@ -63,6 +67,7 @@ type
 
     pnlSimulationConfig: TPanel;
     gbSimulationConfig: TGroupBox;
+    lblTitleSim: TLabel;
     lblSimRhythm: TLabel;
     cboSimRhythm: TComboBox;
     lblSimBPM: TLabel;
@@ -70,16 +75,19 @@ type
     lblQuality: TLabel;
     cboQuality: TComboBox;
     chkPowerLine60Hz: TCheckBox;
+    lblPowerLine60Hz: TLabel;
     btnStartSimulation: TButton;
     btnGenDataset: TButton;
 
     gbBPMStep2: TGroupBox;
+    lblTitleBPM: TLabel;
     lblBPMValue2: TLabel;
     lblBPMUnit2: TLabel;
     lblHeartStatus2: TLabel;
     lblSourceDesc: TLabel;
 
     gbSQLiteRecord: TGroupBox;
+    lblTitleRecord: TLabel;
     lblPatient: TLabel;
     edtPatient: TEdit;
     btnRecordToggle: TButton;
@@ -88,6 +96,7 @@ type
     lblDBFile: TLabel;
 
     gbStageNav: TGroupBox;
+    lblTitleGT: TLabel;
     lblGTGenerated: TLabel;
     lblGTDetected: TLabel;
     lblGTStatus: TLabel;
@@ -142,6 +151,9 @@ type
     procedure PaintBoxAnalysisResize(Sender: TObject);
     procedure PaintBoxECGPaint(Sender: TObject);
     procedure PaintBoxECGResize(Sender: TObject);
+        procedure lblSourceHwClick(Sender: TObject);
+    procedure lblSourceSimClick(Sender: TObject);
+    procedure lblPowerLine60HzClick(Sender: TObject);
     procedure rbSourceChange(Sender: TObject);
     procedure spnSimBPMChange(Sender: TObject);
     procedure TimerUITimer(Sender: TObject);
@@ -331,6 +343,21 @@ begin
   btnRecordToggle.Font.Color := clRed;
   lblRecordStatus.Caption := 'Pronto para Nova Gravacao';
   pbRecordProgress.Position := 0;
+end;
+
+procedure TMainForm.lblSourceHwClick(Sender: TObject);
+begin
+  rbSourceHardware.Checked := True;
+end;
+
+procedure TMainForm.lblSourceSimClick(Sender: TObject);
+begin
+  rbSourceSimulation.Checked := True;
+end;
+
+procedure TMainForm.lblPowerLine60HzClick(Sender: TObject);
+begin
+  chkPowerLine60Hz.Checked := not chkPowerLine60Hz.Checked;
 end;
 
 procedure TMainForm.rbSourceChange(Sender: TObject);
@@ -798,7 +825,9 @@ begin
   begin
     lblBPMValue2.Caption := '--';
     lblHeartStatus2.Caption := 'Monitor Parado';
-    lblBPMValue2.Font.Color := clGray;
+    lblBPMValue2.Font.Color := clWhite;
+    lblHeartStatus2.Font.Color := clYellow;
+    lblSourceDesc.Font.Color := clWhite;
     StatusBar1.Panels[0].Text := 'Status: Parado';
   end;
 end;
@@ -814,16 +843,20 @@ begin
     if rbSourceSimulation.Checked then
     begin
       lblGTGenerated.Caption := 'Ritmo Configurado: ' + RhythmTypeToString(FSimParams.RhythmType);
+      lblGTGenerated.Font.Color := clWhite;
       lblGTDetected.Caption := 'Aguardando Inicio da Simulacao...';
+      lblGTDetected.Font.Color := clWhite;
       lblGTStatus.Caption := 'Status: Simulador em Pausa';
       lblGTStatus.Font.Color := clYellow;
     end
     else
     begin
       lblGTGenerated.Caption := 'Origem: Hardware Real (AD8232)';
+      lblGTGenerated.Font.Color := clWhite;
       lblGTDetected.Caption := 'Serial Desconectada';
+      lblGTDetected.Font.Color := clWhite;
       lblGTStatus.Caption := 'Status: Hardware Ocioso';
-      lblGTStatus.Font.Color := clGray;
+      lblGTStatus.Font.Color := clWhite;
     end;
     Exit;
   end;
@@ -836,6 +869,7 @@ begin
     lblGTGenerated.Caption := Format('Ritmo Gerado: %s (%s)', [
       RhythmTypeToString(FSimParams.RhythmType), GenCode
     ]);
+    lblGTGenerated.Font.Color := clWhite;
 
     // Deteccao classica / heuristica
     if Stats.BPM > 105 then
@@ -851,9 +885,10 @@ begin
     else
       DetCode := 'N';
 
-    lblGTDetected.Caption := Format('Classico: %s | YOLO 1D: %s (%.0f BPM)', [
+    lblGTDetected.Caption := Format('Classico: %s | YOLO 1D: %s (%d BPM)', [
       Stats.StatusText, DetCode, Stats.BPM
     ]);
+    lblGTDetected.Font.Color := clWhite;
 
     IsMatch := (GenCode = DetCode) or ((GenCode = 'N') and (Stats.BPM >= 55) and (Stats.BPM <= 105));
     if IsMatch then
