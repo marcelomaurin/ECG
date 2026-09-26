@@ -26,9 +26,16 @@ CLASSES_MAP = {
 def load_model(weights_path=None):
     """Carrega o modelo ECGYOLO1D."""
     model = ECGYOLO1D(in_channels=1, num_classes=5)
-    if weights_path and os.path.exists(weights_path):
-        state_dict = torch.load(weights_path, map_location="cpu")
-        model.load_state_dict(state_dict)
+    default_weights = os.path.join(os.path.dirname(__file__), "..", "..", "models", "ecg_yolo", "ecg_yolo1d_best.pt")
+    target_weights = weights_path if weights_path and os.path.exists(weights_path) else default_weights
+
+    if os.path.exists(target_weights):
+        try:
+            state_dict = torch.load(target_weights, map_location="cpu", weights_only=True)
+            model.load_state_dict(state_dict)
+            print(f"Pesos do modelo YOLO 1D carregados de: {target_weights}")
+        except Exception as e:
+            print(f"Aviso ao carregar pesos: {e}")
     model.eval()
     return model
 
@@ -142,22 +149,59 @@ def fallback_morphological_detector(signal, duration_sec=10.0, sample_rate=500):
         else:
             i += 1
 
+    # 1. Calcula intervalo RR medio
+    rr_intervals = []
+    for idx in range(1, len(peaks)):
+        rr = (peaks[idx] - peaks[idx - 1]) / sample_rate
+        if 0.25 <= rr <= 2.2:
+            rr_intervals.append(rr)
+    mean_rr = float(np.mean(rr_intervals)) if len(rr_intervals) > 0 else 0.80
+
     for idx, p in enumerate(peaks):
         center_s = p / sample_rate
-        # Alterna ocasionalmente um batimento ventricular (PVC) para teste de arritmia
-        is_pvc = (idx > 0 and (idx % 5 == 0))
-        cls_id = 2 if is_pvc else 0
-        cls_info = CLASSES_MAP[cls_id]
-        dur_s = 0.13 if is_pvc else 0.09
+        peak_amp = abs(signal[p])
+        base_thresh = max(0.15, peak_amp * 0.15)
 
-        start_s = max(0.0, center_s - (dur_s / 2.0))
-        end_s = min(duration_sec, center_s + (dur_s / 2.0))
-        conf = round(0.91 if is_pvc else 0.96, 2)
+        # Medicao real da largura do QRS buscando inicio de Q e fim de S
+        q_idx = p
+        for j in range(p - 1, max(-1, p - int(sample_rate * 0.08)), -1):
+            if abs(signal[j]) <= base_thresh:
+                q_idx = j
+                break
+
+        s_idx = p
+        for j in range(p + 1, min(total_samples, p + int(sample_rate * 0.12))):
+            if abs(signal[j]) <= base_thresh:
+                s_idx = j
+                break
+
+        dur_s = (s_idx - q_idx) / sample_rate
+        if dur_s < 0.055: dur_s = 0.080
+        dur_ms = dur_s * 1000.0
+
+        # Medicao de intervalo RR
+        curr_rr = (peaks[idx] - peaks[idx - 1]) / sample_rate if idx > 0 else mean_rr
+        is_premature = (idx > 0) and (curr_rr < 0.82 * mean_rr)
+        is_widened = (dur_ms >= 115.0) or (peak_amp > 1.8 and dur_ms >= 105.0)
+
+        if is_widened and (is_premature or peak_amp > 1.6):
+            cls_id = 2  # Ectopia Ventricular (PVC)
+            conf = round(float(np.clip(0.85 + (dur_ms - 110.0) / 100.0, 0.75, 0.98)), 3)
+        elif is_premature and not is_widened:
+            cls_id = 1  # Ectopia Supraventricular (PAC)
+            conf = round(float(np.clip(0.82 + (mean_rr - curr_rr) / mean_rr, 0.70, 0.96)), 3)
+        else:
+            cls_id = 0  # Batimento Normal (N)
+            conf = round(float(np.clip(0.92 + (1.0 - abs(dur_ms - 88.0) / 100.0) * 0.06, 0.80, 0.99)), 3)
+
+        cls_info = CLASSES_MAP[cls_id]
+        start_s = max(0.0, q_idx / sample_rate)
+        end_s = min(duration_sec, s_idx / sample_rate)
 
         events.append({
             "start_s": round(start_s, 3),
             "end_s": round(end_s, 3),
-            "duration_ms": round(dur_s * 1000.0, 1),
+            "duration_ms": round(dur_ms, 1),
             "class_id": cls_id,
             "class_code": cls_info["code"],
             "class_name": cls_info["name"],

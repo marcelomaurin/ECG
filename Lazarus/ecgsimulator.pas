@@ -22,13 +22,15 @@ type
     FQueueHead: Integer;
     FQueueTail: Integer;
 
-    // Estado interno da geracao continua
-    FPhase: Double;             // Fase do batimento atual (0.0 a 1.0)
-    FBeatDurationMs: Double;    // Duracao do ciclo atual
-    FCurrentBeatIndex: Integer; // Contador de batimentos para injecao periodica
-    FNextIsPVC: Boolean;
-    FNextIsPAC: Boolean;
-    FAFibNextIntervalMs: Double;
+    // Estado interno da geracao continua com base de tempo fisiologica real (ms)
+    FBeatTimeMs: Double;        // Tempo decorrido no batimento atual (ms)
+    FCurrentRRMs: Double;       // Duracao do ciclo atual (intervalo RR em ms)
+    FCurrentBeatIndex: Integer; // Contador de batimentos
+    FCurrentClass: String;      // Rotulo do batimento: 'N', 'V', 'S', etc.
+    FIsCurrentPVC: Boolean;
+    FIsCurrentPAC: Boolean;
+    FPrevWasPVC: Boolean;
+    FPrevWasPAC: Boolean;
     FLastTickMs: QWord;
     FTotalSamplesGenerated: Int64;
 
@@ -162,14 +164,16 @@ begin
   FQueueTail := 0;
   FThread := nil;
 
-  FPhase := 0.0;
+  FBeatTimeMs := 0.0;
   FCurrentBeatIndex := 0;
-  FNextIsPVC := False;
-  FNextIsPAC := False;
-  FAFibNextIntervalMs := 600.0;
+  FCurrentRRMs := 60000.0 / Max(30.0, FParams.HeartRate);
+  FCurrentClass := 'N';
+  FIsCurrentPVC := False;
+  FIsCurrentPAC := False;
+  FPrevWasPVC := False;
+  FPrevWasPAC := False;
   FLastTickMs := GetTickCount64;
   FTotalSamplesGenerated := 0;
-  FBeatDurationMs := 60000.0 / Max(30.0, FParams.HeartRate);
 end;
 
 destructor TSimulatedECGSource.Destroy;
@@ -184,7 +188,6 @@ begin
   FLock.Acquire;
   try
     FParams := AParams;
-    FBeatDurationMs := 60000.0 / Max(30.0, FParams.HeartRate);
   finally
     FLock.Release;
   end;
@@ -215,169 +218,175 @@ end;
 
 function TSimulatedECGSource.ComputeNextSample(const NowTickMs: QWord): TECGSample;
 var
-  ElapsedMs, Sec: Double;
-  P, Q, R, S, T: Double;
+  Sec, BasalRR: Double;
+  DeltaT, P, Q, R, S, T: Double;
   Baseline, Noise, PowerLine: Double;
   RawVal, FilteredVal: Double;
-  CurrentClass: String;
-  IsPVCBeat, IsPACBeat: Boolean;
-  PhaseStep: Double;
+  RPeakTimeMs: Double;
+  IsPVC, IsPAC: Boolean;
 begin
-  ElapsedMs := 2.0; // 500 Hz = 2ms por amostra
-  PhaseStep := ElapsedMs / Max(150.0, FBeatDurationMs);
-  FPhase := FPhase + PhaseStep;
+  BasalRR := 60000.0 / Max(30.0, FParams.HeartRate);
+  RPeakTimeMs := 180.0; // O pico R ocorre estavelmente a 180ms do inicio do ciclo
 
-  // Final do ciclo cardíaco -> Prepara próximo ciclo
-  if FPhase >= 1.0 then
+  // Avanco estrito a 500 Hz (2.0 ms por amostra)
+  FBeatTimeMs := FBeatTimeMs + 2.0;
+
+  // Final do ciclo cardiaco atual -> Transicao para o proximo batimento
+  if FBeatTimeMs >= FCurrentRRMs then
   begin
-    FPhase := FPhase - 1.0;
+    FBeatTimeMs := FBeatTimeMs - FCurrentRRMs;
     Inc(FCurrentBeatIndex);
 
-    // Ajusta o intervalo para o próximo batimento de acordo com o ritmo
+    FPrevWasPVC := FIsCurrentPVC;
+    FPrevWasPAC := FIsCurrentPAC;
+    FIsCurrentPVC := False;
+    FIsCurrentPAC := False;
+
     case FParams.RhythmType of
       rtNormal:
       begin
-        // Leve arritmia sinusal respiratória natural (+-3%)
-        FBeatDurationMs := (60000.0 / FParams.HeartRate) * (1.0 + (Sin(FCurrentBeatIndex * 0.4) * 0.035));
-        FNextIsPVC := False;
-        FNextIsPAC := False;
+        FCurrentClass := 'N';
+        // Variabilidade sinusal respiratoria fisiologica suave (+-3.5%)
+        FCurrentRRMs := BasalRR * (1.0 + (Sin(FCurrentBeatIndex * 0.35) * 0.035));
       end;
 
       rtSinusTachycardia:
       begin
-        FBeatDurationMs := 60000.0 / Max(100.0, FParams.HeartRate);
-        FNextIsPVC := False;
-        FNextIsPAC := False;
+        FCurrentClass := 'TACHY';
+        FCurrentRRMs := BasalRR;
       end;
 
       rtSinusBradycardia:
       begin
-        FBeatDurationMs := 60000.0 / Min(55.0, FParams.HeartRate);
-        FNextIsPVC := False;
-        FNextIsPAC := False;
+        FCurrentClass := 'BRADY';
+        FCurrentRRMs := BasalRR;
       end;
 
       rtAtrialFibrillation:
       begin
-        // Fibrilação Atrial: Intervalos RR caóticos entre 420ms e 1100ms
-        FBeatDurationMs := 420.0 + (Random * 680.0);
-        FNextIsPVC := False;
-        FNextIsPAC := False;
+        FCurrentClass := 'AFIB';
+        // Fibrilacao Atrial: Intervalos RR caoticos entre 420ms e 1050ms
+        FCurrentRRMs := 420.0 + (Random * 630.0);
       end;
 
       rtPVC:
       begin
-        // Injecao de PVC a cada N batimentos
-        if (FCurrentBeatIndex mod Max(2, FParams.PVCFrequency) = 0) then
+        // Se o batimento anterior foi o PVC, agora ocorre o batimento de PAUSA COMPENSATORIA
+        if FPrevWasPVC then
         begin
-          FNextIsPVC := True;
-          // Batimento prematuro (encurtado em 35%)
-          FBeatDurationMs := (60000.0 / FParams.HeartRate) * 0.65;
+          FCurrentClass := 'N';
+          // Pausa compensatoria completa: intervalo longo ate o proximo sinusal
+          FCurrentRRMs := BasalRR * 1.38;
         end
-        else if FNextIsPVC then
+        // Se alcancou a frequencia de disparo, ESTE eh o batimento PREMATURO de PVC
+        else if (FCurrentBeatIndex mod Max(2, FParams.PVCFrequency) = 0) then
         begin
-          // Pausa compensatória após o PVC (+40%)
-          FNextIsPVC := False;
-          FBeatDurationMs := (60000.0 / FParams.HeartRate) * 1.35;
+          FIsCurrentPVC := True;
+          FCurrentClass := 'V';
+          // Acoplamento precoce: o intervalo ANTERIOR a este batimento foi encurtado
+          FCurrentRRMs := BasalRR * 0.62;
         end
         else
         begin
-          FBeatDurationMs := 60000.0 / FParams.HeartRate;
-          FNextIsPVC := False;
+          FCurrentClass := 'N';
+          FCurrentRRMs := BasalRR;
         end;
       end;
 
       rtPAC:
       begin
-        // Extrassístole Atrial (PAC)
-        if (FCurrentBeatIndex mod Max(2, FParams.PVCFrequency) = 0) then
+        // Se o batimento anterior foi PAC, intervalo de pausa nao-compensatoria
+        if FPrevWasPAC then
         begin
-          FNextIsPAC := True;
-          FBeatDurationMs := (60000.0 / FParams.HeartRate) * 0.70;
+          FCurrentClass := 'N';
+          FCurrentRRMs := BasalRR * 1.25;
         end
-        else if FNextIsPAC then
+        else if (FCurrentBeatIndex mod Max(2, FParams.PVCFrequency) = 0) then
         begin
-          FNextIsPAC := False;
-          FBeatDurationMs := (60000.0 / FParams.HeartRate) * 1.25;
+          FIsCurrentPAC := True;
+          FCurrentClass := 'S';
+          FCurrentRRMs := BasalRR * 0.68; // Batimento atrial prematuro
         end
         else
         begin
-          FBeatDurationMs := 60000.0 / FParams.HeartRate;
-          FNextIsPAC := False;
+          FCurrentClass := 'N';
+          FCurrentRRMs := BasalRR;
         end;
       end;
     end;
   end;
 
-  IsPVCBeat := (FParams.RhythmType = rtPVC) and FNextIsPVC;
-  IsPACBeat := (FParams.RhythmType = rtPAC) and FNextIsPAC;
+  IsPVC := FIsCurrentPVC;
+  IsPAC := FIsCurrentPAC;
+  DeltaT := FBeatTimeMs - RPeakTimeMs; // Tempo relativo ao centro do pico R em ms
 
-  // --- MODELAGEM DAS ONDAS POR CURVAS GAUSSIANAS ---
+  // --- MORFOLOGIA DAS ONDAS EM MILISSEGUNDOS REAIS (INDEPENDENTE DO RR) ---
 
-  if IsPVCBeat then
+  if IsPVC then
   begin
-    // MORFOLOGIA DE PVC:
-    // Sem onda P, complexo QRS aberrante, largo (>120ms), polaridade invertida e onda T oposta
+    // MORFOLOGIA DE EXTRASSISTOLE VENTRICULAR (PVC):
+    // 1. Ausencia completa de onda P (origem ectopica ventricular)
     P := 0.0;
     Q := 0.0;
-    R := 420.0 * Exp(-Sqr((FPhase - 0.32) / 0.038)); // R largo e precoce
-    S := -180.0 * Exp(-Sqr((FPhase - 0.38) / 0.035)); // S profundo
-    T := -110.0 * Exp(-Sqr((FPhase - 0.58) / 0.075)); // Onda T invertida
-    CurrentClass := 'V';
+    // 2. QRS aberrante e alargado (>130ms): sigma = 30ms produz base > 130ms
+    R := 440.0 * Exp(-0.5 * Sqr(DeltaT / 30.0));
+    // 3. Onda S profunda e alargada
+    S := -220.0 * Exp(-0.5 * Sqr((DeltaT - 38.0) / 26.0));
+    // 4. Onda T invertida (discordancia ventricular classica)
+    T := -120.0 * Exp(-0.5 * Sqr((DeltaT - 180.0) / 55.0));
   end
-  else if IsPACBeat then
+  else if IsPAC then
   begin
-    // MORFOLOGIA DE PAC:
-    // Onda P precoce e bifásica, QRS estreito e normal
-    P := -25.0 * Exp(-Sqr((FPhase - 0.12) / 0.025)) + 40.0 * Exp(-Sqr((FPhase - 0.15) / 0.025));
-    Q := FParams.QAmplitude * Exp(-Sqr((FPhase - 0.35) / 0.012));
-    R := FParams.RAmplitude * Exp(-Sqr((FPhase - 0.37) / 0.016));
-    S := FParams.SAmplitude * Exp(-Sqr((FPhase - 0.40) / 0.014));
-    T := FParams.TAmplitude * Exp(-Sqr((FPhase - 0.60) / 0.060));
-    CurrentClass := 'S';
+    // MORFOLOGIA DE EXTRASSISTOLE ATRIAL (PAC):
+    // Onda P precoce e bifasica/deformada
+    P := -25.0 * Exp(-0.5 * Sqr((DeltaT + 155.0) / 16.0)) + 38.0 * Exp(-0.5 * Sqr((DeltaT + 130.0) / 16.0));
+    // QRS estreito normal (conducao ventricular normal ~85ms)
+    Q := FParams.QAmplitude * Exp(-0.5 * Sqr((DeltaT + 24.0) / 8.0));
+    R := FParams.RAmplitude * Exp(-0.5 * Sqr(DeltaT / 14.0));
+    S := FParams.SAmplitude * Exp(-0.5 * Sqr((DeltaT - 22.0) / 10.0));
+    T := FParams.TAmplitude * Exp(-0.5 * Sqr((DeltaT - 200.0) / 45.0));
   end
   else if FParams.RhythmType = rtAtrialFibrillation then
   begin
-    // MORFOLOGIA DE FIBRILAÇÃO ATRIAL:
-    // Sem onda P organizada (P=0), QRS estreito, ondas 'f' contínuas
+    // MORFOLOGIA DE FIBRILACAO ATRIAL:
+    // Sem onda P organizada (P=0), QRS estreito e estavel (~85ms)
     P := 0.0;
-    Q := FParams.QAmplitude * Exp(-Sqr((FPhase - 0.33) / 0.012));
-    R := FParams.RAmplitude * Exp(-Sqr((FPhase - 0.35) / 0.016));
-    S := FParams.SAmplitude * Exp(-Sqr((FPhase - 0.38) / 0.014));
-    T := FParams.TAmplitude * Exp(-Sqr((FPhase - 0.58) / 0.060));
-    CurrentClass := 'AFIB';
+    Q := FParams.QAmplitude * Exp(-0.5 * Sqr((DeltaT + 24.0) / 8.0));
+    R := FParams.RAmplitude * Exp(-0.5 * Sqr(DeltaT / 14.0));
+    S := FParams.SAmplitude * Exp(-0.5 * Sqr((DeltaT - 22.0) / 10.0));
+    T := FParams.TAmplitude * Exp(-0.5 * Sqr((DeltaT - 200.0) / 45.0));
   end
   else
   begin
     // MORFOLOGIA NORMAL / TAQUICARDIA / BRADICARDIA (RITMO SINUSAL):
-    P := FParams.PAmplitude * Exp(-Sqr((FPhase - 0.15) / FParams.PDuration));
-    Q := FParams.QAmplitude * Exp(-Sqr((FPhase - 0.32) / 0.015));
-    R := FParams.RAmplitude * Exp(-Sqr((FPhase - 0.35) / 0.018));
-    S := FParams.SAmplitude * Exp(-Sqr((FPhase - 0.38) / 0.016));
-    T := FParams.TAmplitude * Exp(-Sqr((FPhase - 0.58) / FParams.TDuration));
-
-    if FParams.RhythmType = rtSinusTachycardia then
-      CurrentClass := 'TACHY'
-    else if FParams.RhythmType = rtSinusBradycardia then
-      CurrentClass := 'BRADY'
-    else
-      CurrentClass := 'N';
+    // P normal (~80ms), QRS estreito (~85ms), T normal
+    P := FParams.PAmplitude * Exp(-0.5 * Sqr((DeltaT + 140.0) / 22.0));
+    Q := FParams.QAmplitude * Exp(-0.5 * Sqr((DeltaT + 24.0) / 8.0));
+    R := FParams.RAmplitude * Exp(-0.5 * Sqr(DeltaT / 14.0));
+    S := FParams.SAmplitude * Exp(-0.5 * Sqr((DeltaT - 22.0) / 10.0));
+    T := FParams.TAmplitude * Exp(-0.5 * Sqr((DeltaT - 200.0) / 45.0));
   end;
 
   Sec := FTotalSamplesGenerated / 500.0;
   Inc(FTotalSamplesGenerated);
 
-  // Deriva de linha de base (respiração a ~0.25 Hz)
+  // Deriva de linha de base respiratoria (~0.25 Hz)
   Baseline := FParams.BaselineDrift * 35.0 * Sin(2.0 * Pi * 0.25 * Sec);
 
-  // Ondulações de fibrilação atrial na linha de base
+  // Ondulacoes caoticas de fibrilacao atrial na linha de base ('f' waves multi-frequenciais)
   if FParams.RhythmType = rtAtrialFibrillation then
-    Baseline := Baseline + 18.0 * Sin(2.0 * Pi * 6.5 * Sec) + 12.0 * Cos(2.0 * Pi * 4.2 * Sec);
+  begin
+    Baseline := Baseline +
+      14.0 * Sin(2.0 * Pi * 4.1 * Sec) +
+      11.0 * Cos(2.0 * Pi * 5.7 * Sec) +
+       9.0 * Sin(2.0 * Pi * 7.3 * Sec) +
+       6.0 * Cos(2.0 * Pi * 8.8 * Sec);
+  end;
 
-  // Ruído de alta frequência
+  // Ruido estocastico de alta frequencia
   Noise := (Random - 0.5) * (FParams.NoiseLevel * 50.0);
 
-  // Interferência de 60 Hz da rede elétrica
+  // Interferencia da rede eletrica de 60 Hz
   if FParams.PowerLine60Hz then
     PowerLine := 25.0 * Sin(2.0 * Pi * 60.0 * Sec)
   else
@@ -391,8 +400,8 @@ begin
   Result.FilteredValue := FilteredVal;
   Result.LeadOff := False;
   Result.IsSimulated := True;
-  Result.ExpectedClass := CurrentClass;
-  Result.IsPeak := (FPhase >= 0.34) and (FPhase <= 0.36);
+  Result.ExpectedClass := FCurrentClass;
+  Result.IsPeak := (abs(DeltaT) <= 2.0); // Marca o pico R no topo da onda R
 end;
 
 procedure TSimulatedECGSource.Start;

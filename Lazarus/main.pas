@@ -871,34 +871,34 @@ begin
     ]);
     lblGTGenerated.Font.Color := clWhite;
 
-    // Deteccao classica / heuristica
+    // Deteccao real baseada estritamente nas metricas fisicas do sinal captadas pelo DSP
     if Stats.BPM > 105 then
       DetCode := 'TACHY'
     else if (Stats.BPM < 55) and (Stats.BPM > 0) then
       DetCode := 'BRADY'
-    else if FSimParams.RhythmType = rtAtrialFibrillation then
+    else if Stats.RRStdDev > 130.0 then // Variabilidade caotica dos intervalos RR (Fibrilacao Atrial)
       DetCode := 'AFIB'
-    else if FSimParams.RhythmType = rtPVC then
+    else if (Stats.RRStdDev > 55.0) and (Stats.Amplitude > 380.0) then // Batimentos prematuros com QRS amplo e pausa compensatoria (PVC)
       DetCode := 'PVC'
-    else if FSimParams.RhythmType = rtPAC then
+    else if (Stats.RRStdDev > 40.0) then // Arritmia com batimentos prematuros (PAC)
       DetCode := 'PAC'
     else
       DetCode := 'N';
 
-    lblGTDetected.Caption := Format('Classico: %s | YOLO 1D: %s (%d BPM)', [
+    lblGTDetected.Caption := Format('Detector DSP: %s | Ritmo Avaliado: %s (%d BPM)', [
       Stats.StatusText, DetCode, Stats.BPM
     ]);
     lblGTDetected.Font.Color := clWhite;
 
-    IsMatch := (GenCode = DetCode) or ((GenCode = 'N') and (Stats.BPM >= 55) and (Stats.BPM <= 105));
+    IsMatch := (GenCode = DetCode) or ((GenCode = 'N') and (DetCode = 'N') and (Stats.BPM >= 55) and (Stats.BPM <= 105));
     if IsMatch then
     begin
-      lblGTStatus.Caption := 'Resultado Ground Truth: CORRETO [OK]';
+      lblGTStatus.Caption := 'Resultado Ground Truth: CONCORDANTE [OK]';
       lblGTStatus.Font.Color := clLime;
     end
     else
     begin
-      lblGTStatus.Caption := 'Resultado Ground Truth: ANALISANDO...';
+      lblGTStatus.Caption := Format('Resultado Ground Truth: EM ANALISE (Gerado: %s | Detectado: %s)', [GenCode, DetCode]);
       lblGTStatus.Font.Color := clYellow;
     end;
   end
@@ -984,8 +984,9 @@ procedure TMainForm.btnRunYOLOClick(Sender: TObject);
 begin
   if FRecordedCount < 100 then
   begin
-    FRecordedCount := 5000;
-    btnNewExamClick(nil);
+    ShowMessage('Nenhum exame gravado para analise!' + sLineBreak +
+                'Va para a Etapa 2, inicie a aquisicao e clique em "Iniciar Gravacao (10s)".');
+    Exit;
   end;
 
   TYOLO1DDetector.FreeEventsList(FYOLOEvents);
@@ -1013,7 +1014,9 @@ var
   EventObj: TJSONObject;
 begin
   PythonExe := 'python';
-  ScriptPath := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'ai' + PathDelim + 'yolo1d' + PathDelim + 'predict.py';
+  ScriptPath := ExtractFilePath(ParamStr(0)) + 'ai' + PathDelim + 'yolo1d' + PathDelim + 'predict.py';
+  if not FileExists(ScriptPath) then
+    ScriptPath := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'ai' + PathDelim + 'yolo1d' + PathDelim + 'predict.py';
   OutJsonPath := ExtractFilePath(ParamStr(0)) + 'yolo_out.json';
 
   if not FileExists(ScriptPath) then
