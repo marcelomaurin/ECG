@@ -516,11 +516,15 @@
               ItemIndex = 0
               Items.Strings = (
                 'Ritmo Normal (Sinusal)'
+                'Bradicardia Sinusal'
+                'Taquicardia Sinusal'
                 'Fibrilacao Atrial (AFIB)'
-                'Extrassistole Ventricular (PVC)'
+                'Flutter Atrial (4:1)'
+                'Taquicardia Supraventricular'
                 'Extrassistole Atrial (PAC)'
-                'Taquicardia Sinusal (130 BPM)'
-                'Bradicardia Sinusal (48 BPM)'
+                'Extrassistole Ventricular (PVC)'
+                'Taquicardia Ventricular'
+                'Fibrilacao Ventricular'
               )
               OnChange = cboSimRhythmChange
               Style = csDropDownList

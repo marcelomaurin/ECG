@@ -21,7 +21,7 @@ O software implementa **dois modos de aquisição claramente separados** atravé
                        │          │              │
                        │       NORMAL         ANORMAL
                        │                         │
-                       │                 5 padrões patológicos
+                       │                 9 padrões adicionais
                        │                         │
                        └────────────┬────────────┘
                                     │
@@ -70,7 +70,7 @@ O software implementa **dois modos de aquisição claramente separados** atravé
 
 ---
 
-## Os 6 Ritmos do Simulador Didático
+## Os 10 Ritmos do Simulador Didático
 
 | Ritmo | Código Ground Truth | Características Eletrocardiográficas Simuladas |
 |---|---|---|
@@ -79,7 +79,13 @@ O software implementa **dois modos de aquisição claramente separados** atravé
 | **Extrassístole Ventricular** | `PVC` | Batimento prematuro com QRS alargado (>120ms), morfologia aberrante e pausa compensatória |
 | **Extrassístole Atrial** | `PAC` | Batimento atrial precoce com P prematura/deformada, QRS estreito e intervalo RR encurtado |
 | **Taquicardia Sinusal** | `TACHY` | Ritmo sinusal acelerado (100–160 BPM, padrão 130 BPM), intervalos RR reduzidos |
-| **Bradicardia Sinusal** | `BRADY` | Ritmo sinusal lentificado (40–55 BPM, padrão 48 BPM), intervalos RR alargados |
+| **Bradicardia Sinusal** | `BRADY` | Ritmo sinusal lentificado (padrão 48 BPM), intervalos RR alargados |
+| **Flutter Atrial** | `AFLUT` | Ondas em serra a 300/min, condução 4:1 e 75 BPM ventricular |
+| **Taquicardia Supraventricular** | `SVT` | QRS estreito, ritmo regular a 180 BPM e onda P oculta |
+| **Taquicardia Ventricular** | `VT` | Complexos largos monomórficos a 180 BPM |
+| **Fibrilação Ventricular** | `VFIB` | Atividade desorganizada, sem QRS ou BPM organizado |
+
+Os dez ritmos estão disponíveis na Etapa 2 e na geração CSV/JSON. O classificador existente não foi ampliado para os quatro novos ritmos: a interface identifica essa limitação e preserva o traçado para estudo. Veja [docs/SIMULATOR.md](docs/SIMULATOR.md) para parâmetros, formato dos dados, referências e testes.
 
 ---
 

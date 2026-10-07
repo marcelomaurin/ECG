@@ -1,0 +1,5 @@
+# Dependencias Python para Inferencia de IA (YOLO 1D + Diagnostico Clinico)
+# Instale em uma maquina limpa com: pip install -r requirements.txt
+torch>=2.0.0
+numpy>=1.24.0
+pyyaml>=6.0

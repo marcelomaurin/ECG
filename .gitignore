@@ -37,3 +37,7 @@ models/ecg_yolo/*.pth
 Thumbs.db
 [Dd]esktop.ini
 .DS_Store
+
+# Permitir instaladores e executaveis em bin/
+!bin/*.exe
+!bin/**/*.exe

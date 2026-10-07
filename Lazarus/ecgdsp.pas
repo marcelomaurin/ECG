@@ -1,4 +1,4 @@
-﻿unit ecgdsp;
+unit ecgdsp;
 
 {$mode objfpc}{$H+}
 
@@ -9,10 +9,27 @@ uses
   soundfilters, numps, ecgtypes;
 
 type
+  { Filtro passa-altas de 1a ordem sub-hertz independente para remocao de baseline wander }
+  TECGHighPass05 = class
+  private
+    FSampleRate: Double;
+    FCutoffHz: Double;
+    FAlpha: Double;
+    FLastInput: Double;
+    FLastOutput: Double;
+    procedure Recalculate;
+  public
+    constructor Create(ASampleRate: Double = 500.0; ACutoffHz: Double = 0.5);
+    procedure Reset;
+    function Process(const AInput: Double): Double;
+    property SampleRate: Double read FSampleRate write FSampleRate;
+    property CutoffHz: Double read FCutoffHz write FCutoffHz;
+  end;
+
   { TECGProcessor }
   TECGProcessor = class
   private
-    FHighPass: THighPassFilter;
+    FHighPass: TECGHighPass05;
     FLowPass: TLowPassFilter;
     FBpmAverager: TAverageFilter;
     FNumPS: TNumPS;
@@ -37,6 +54,8 @@ type
     FRecentIdx: Integer;
     FRecentFull: Boolean;
 
+    FWasLeadsOff: Boolean;
+
   public
     constructor Create(ASampleRate: Double = 100.0);
     destructor Destroy; override;
@@ -55,22 +74,62 @@ type
 
 implementation
 
+{ TECGHighPass05 }
+
+constructor TECGHighPass05.Create(ASampleRate: Double; ACutoffHz: Double);
+begin
+  inherited Create;
+  FSampleRate := ASampleRate;
+  if FSampleRate < 10.0 then FSampleRate := 500.0;
+  FCutoffHz := ACutoffHz;
+  if FCutoffHz < 0.05 then FCutoffHz := 0.5;
+  Recalculate;
+  Reset;
+end;
+
+procedure TECGHighPass05.Recalculate;
+var
+  RC, dt: Double;
+begin
+  if (FSampleRate > 0) and (FCutoffHz > 0) then
+  begin
+    RC := 1.0 / (2.0 * Pi * FCutoffHz);
+    dt := 1.0 / FSampleRate;
+    FAlpha := RC / (RC + dt);
+  end
+  else
+    FAlpha := 0.0;
+end;
+
+procedure TECGHighPass05.Reset;
+begin
+  FLastInput := 0.0;
+  FLastOutput := 0.0;
+end;
+
+function TECGHighPass05.Process(const AInput: Double): Double;
+begin
+  FLastOutput := FAlpha * FLastOutput + FAlpha * (AInput - FLastInput);
+  FLastInput := AInput;
+  Result := FLastOutput;
+end;
+
+{ TECGProcessor }
+
 constructor TECGProcessor.Create(ASampleRate: Double = 100.0);
 begin
   inherited Create;
   FSampleRate := ASampleRate;
-  if FSampleRate < 10.0 then FSampleRate := 100.0;
+  if FSampleRate < 10.0 then FSampleRate := 500.0;
 
-  FHighPass := THighPassFilter.Create(nil);
-  FHighPass.SampleRate := FSampleRate;
-  FHighPass.CutoffFrequency := 0.5; // Elimina oscilação da linha de base (<0.5 Hz)
+  FHighPass := TECGHighPass05.Create(FSampleRate, 0.5); // Elimina oscilacao da linha de base (<0.5 Hz)
 
   FLowPass := TLowPassFilter.Create(nil);
   FLowPass.SampleRate := FSampleRate;
-  FLowPass.CutoffFrequency := 40.0; // Elimina ruídos de alta frequência (>40 Hz)
+  FLowPass.CutoffFrequency := 40.0; // Elimina ruidos de alta frequencia (>40 Hz)
 
   FBpmAverager := TAverageFilter.Create(nil);
-  FBpmAverager.WindowSize := 8; // Média móvel curta para resposta rápida
+  FBpmAverager.WindowSize := 8; // Media movel curta para resposta rapida
 
   FNumPS := TNumPS.Create(nil);
 
@@ -98,7 +157,7 @@ begin
 
   FLastPeakTimeMs := 0;
   FLastPeakVal := 0.0;
-  FThreshold := 80.0; // Limiar inicial de pico sobre o sinal filtrado centralizado em zero
+  FThreshold := 80.0;
   FBelowThreshold := True;
   FCurrentBPM := 0;
   FInstantBPM := 0.0;
@@ -110,6 +169,7 @@ begin
   FRecentIdx := 0;
   FRecentFull := False;
   FillChar(FRecentBuffer, SizeOf(FRecentBuffer), 0);
+  FWasLeadsOff := False;
 end;
 
 function TECGProcessor.ProcessSample(const ARawValue: Double; const ATimestampMs: Int64; const ALeadsOff: Boolean): TECGRecord;
@@ -126,22 +186,38 @@ begin
   if ALeadsOff then
   begin
     Result.FilteredValue := 0.0;
+    FCurrentBPM := 0;
+    FInstantBPM := 0.0;
+    FLastRRIntervalMs := 0.0;
+    FRRCount := 0;
+    FWasLeadsOff := True;
     Exit;
+  end;
+
+  // Ao reconectar apos perda de eletrodo, reinicializa filtros e detector para evitar transiente falso
+  if FWasLeadsOff then
+  begin
+    FHighPass.Reset;
+    FLowPass.Reset;
+    FBpmAverager.Reset;
+    FLastPeakTimeMs := ATimestampMs;
+    FBelowThreshold := True;
+    FWasLeadsOff := False;
   end;
 
   Filtered := ARawValue;
 
-  // 1. Filtro Passa-Altas (remove drift / baseline wander)
+  // 1. Filtro Passa-Altas com corte em 0.5 Hz (remove drift / baseline wander)
   if FEnableHighPass then
     Filtered := FHighPass.Process(Filtered);
 
-  // 2. Filtro Passa-Baixas (remove ruídos de 60Hz e contrações musculares)
+  // 2. Filtro Passa-Baixas com corte em 40 Hz (remove ruidos de 60Hz e contracoes musculares)
   if FEnableLowPass then
     Filtered := FLowPass.Process(Filtered);
 
   Result.FilteredValue := Filtered;
 
-  // Armazena no buffer recente para estatísticas com TNumPS
+  // Armazena no buffer recente para estatisticas com TNumPS
   FRecentBuffer[FRecentIdx] := Filtered;
   Inc(FRecentIdx);
   if FRecentIdx > High(FRecentBuffer) then
@@ -150,8 +226,8 @@ begin
     FRecentFull := True;
   end;
 
-  // 3. Detecção de Complexo QRS / Pico R
-  // Período refratário: no mínimo 250ms entre batimentos (limite superior fisiológico ~240 bpm)
+  // 3. Deteccao de Complexo QRS / Pico R
+  // Periodo refratario: no minimo 250ms entre batimentos (limite superior fisiologico ~240 bpm)
   TimeDiff := ATimestampMs - FLastPeakTimeMs;
 
   if FBelowThreshold and (Filtered > FThreshold) and (TimeDiff > 250) then
@@ -165,7 +241,7 @@ begin
       FLastRRIntervalMs := TimeDiff;
       CalculatedBPM := 60000.0 / TimeDiff;
 
-      // Filtra batimentos fisiologicamente válidos (30 a 240 bpm)
+      // Filtra batimentos fisiologicamente validos (30 a 240 bpm)
       if (CalculatedBPM >= 30.0) and (CalculatedBPM <= 240.0) then
       begin
         FInstantBPM := CalculatedBPM;
@@ -183,7 +259,7 @@ begin
 
     FLastPeakTimeMs := ATimestampMs;
 
-    // Atualização adaptativa do limiar: ajusta suavemente ao pico detectado
+    // Atualizacao adaptativa do limiar: ajusta suavemente ao pico detectado
     FThreshold := (FThreshold * 0.85) + (Filtered * 0.45 * 0.15);
     if FThreshold < 30.0 then FThreshold := 30.0;
     if FThreshold > 400.0 then FThreshold := 400.0;
@@ -198,7 +274,6 @@ begin
   begin
     FCurrentBPM := 0;
     FInstantBPM := 0.0;
-    // Reduz limiar para tentar recapturar
     FThreshold := Max(30.0, FThreshold * 0.98);
   end;
 end;
@@ -228,14 +303,12 @@ begin
     for I := 0 to DataSize - 1 do
       Arr[I] := FRecentBuffer[I];
 
-    // Estatísticas via TNumPS (do projeto CHATGPT)
     Result.MinVal := FNumPS.Min(Arr);
     Result.MaxVal := FNumPS.Max(Arr);
     Result.MeanVal := FNumPS.Mean(Arr);
     Result.Amplitude := Result.MaxVal - Result.MinVal;
   end;
 
-  // Cálculo da variabilidade RR (desvio padrão)
   if FRRCount > 2 then
   begin
     SetLength(Arr, FRRCount);

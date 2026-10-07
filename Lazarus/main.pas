@@ -172,6 +172,7 @@ type
     FXPos: Integer;
     FLastY: Integer;
     FGain: Double;
+    FUpdatingSimControls: Boolean;
     FSamplesCount: Int64;
     FLastStatsTick: QWord;
 
@@ -179,6 +180,8 @@ type
     FIsRecording: Boolean;
     FRecordStartTick: QWord;
     FRecordedExamId: Int64;
+    FRecordedIsSimulated: Boolean;
+    FRecordedRhythm: TECGRhythmType;
     FRecordedSamples: array[0..9999] of Double;
     FRecordedCount: Integer;
 
@@ -236,11 +239,18 @@ end;
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   ImgPath, DBPath: String;
+  RhythmIndex: Integer;
 begin
   Application.OnException := @GlobalExceptionHandler;
   FDSP := TECGProcessor.Create(500.0);
   FCurrentSource := nil;
   FSimParams := GetDefaultWaveParameters(rtNormal);
+  cboSimRhythm.Items.Clear;
+  for RhythmIndex := Low(ECG_RHYTHMS) to High(ECG_RHYTHMS) do
+    cboSimRhythm.Items.Add(RhythmTypeToString(ECG_RHYTHMS[RhythmIndex]));
+  cboSimRhythm.ItemIndex := 0;
+  spnSimBPM.MinValue := 60;
+  spnSimBPM.MaxValue := 100;
   FBackBuffer := TBitmap.Create;
   FAnalysisBuffer := TBitmap.Create;
 
@@ -381,28 +391,48 @@ begin
 end;
 
 procedure TMainForm.cboSimRhythmChange(Sender: TObject);
+var
+  MinRate, MaxRate: Integer;
 begin
-  case cboSimRhythm.ItemIndex of
-    0: FSimParams := GetDefaultWaveParameters(rtNormal);
-    1: FSimParams := GetDefaultWaveParameters(rtAtrialFibrillation);
-    2: FSimParams := GetDefaultWaveParameters(rtPVC);
-    3: FSimParams := GetDefaultWaveParameters(rtPAC);
-    4: FSimParams := GetDefaultWaveParameters(rtSinusTachycardia);
-    5: FSimParams := GetDefaultWaveParameters(rtSinusBradycardia);
+  if (cboSimRhythm.ItemIndex < Low(ECG_RHYTHMS)) or
+     (cboSimRhythm.ItemIndex > High(ECG_RHYTHMS)) then Exit;
+  if FIsRecording and (FCurrentSource <> nil) and not FCurrentSource.IsHardware then
+    StopRecording;
+  FSimParams := GetDefaultWaveParameters(ECG_RHYTHMS[cboSimRhythm.ItemIndex]);
+  FUpdatingSimControls := True;
+  try
+    GetRhythmRateLimits(FSimParams.RhythmType, MinRate, MaxRate);
+    spnSimBPM.MinValue := 0;
+    spnSimBPM.MaxValue := 300;
+    spnSimBPM.Value := Round(FSimParams.HeartRate);
+    spnSimBPM.MinValue := MinRate;
+    spnSimBPM.MaxValue := MaxRate;
+    spnSimBPM.Enabled := FSimParams.RhythmType <> rtVentricularFibrillation;
+    spnSimBPM.Hint := 'Frequencia ventricular simulada';
+    if FSimParams.RhythmType = rtVentricularFibrillation then
+      spnSimBPM.Hint := 'Fibrilacao ventricular nao tem BPM organizado';
+    if FSimParams.RhythmType = rtAtrialFlutter then
+      spnSimBPM.Hint := 'Flutter 4:1: frequencia atrial = 4 vezes o BPM ventricular';
+    spnSimBPM.ShowHint := True;
+    cboQuality.ItemIndex := Ord(FSimParams.Quality);
+    chkPowerLine60Hz.Checked := FSimParams.PowerLine60Hz;
+  finally
+    FUpdatingSimControls := False;
   end;
 
-  spnSimBPM.Value := Round(FSimParams.HeartRate);
-  cboQuality.ItemIndex := Ord(FSimParams.Quality);
-  chkPowerLine60Hz.Checked := FSimParams.PowerLine60Hz;
-
   if (FCurrentSource <> nil) and not FCurrentSource.IsHardware then
+  begin
     (FCurrentSource as TSimulatedECGSource).UpdateParameters(FSimParams);
-
+    FDSP.Reset;
+    InitBackBuffer;
+    lblSourceDesc.Caption := 'Fonte: ' + FCurrentSource.GetDescription;
+  end;
   UpdateGroundTruthUI;
 end;
 
 procedure TMainForm.spnSimBPMChange(Sender: TObject);
 begin
+  if FUpdatingSimControls then Exit;
   FSimParams.HeartRate := spnSimBPM.Value;
   if (FCurrentSource <> nil) and not FCurrentSource.IsHardware then
     (FCurrentSource as TSimulatedECGSource).UpdateParameters(FSimParams);
@@ -410,6 +440,7 @@ end;
 
 procedure TMainForm.cboQualityChange(Sender: TObject);
 begin
+  if FUpdatingSimControls then Exit;
   case cboQuality.ItemIndex of
     0: // Excelente
     begin
@@ -443,6 +474,7 @@ end;
 
 procedure TMainForm.chkSimControlsChange(Sender: TObject);
 begin
+  if FUpdatingSimControls then Exit;
   FSimParams.PowerLine60Hz := chkPowerLine60Hz.Checked;
   if (FCurrentSource <> nil) and not FCurrentSource.IsHardware then
     (FCurrentSource as TSimulatedECGSource).UpdateParameters(FSimParams);
@@ -622,6 +654,13 @@ begin
   end;
 
   FCurrentSource.Start;
+  if not FCurrentSource.IsRunning then
+  begin
+    ShowMessage('Falha ao iniciar aquisicao. Verifique a porta selecionada ou permissoes.');
+    StopAcquisition;
+    Exit;
+  end;
+
   TimerUI.Enabled := True;
 
   if rbSourceHardware.Checked then
@@ -745,6 +784,9 @@ begin
     begin
       // Processa pelo pipeline unificado de DSP (Filtros passa-alta, passa-baixa, remocao 60Hz, deteccao QRS)
       Rec := FDSP.ProcessSample(SamplesBuffer[I].RawValue, SamplesBuffer[I].TimestampUS div 1000, SamplesBuffer[I].LeadOff);
+      // VF has no organized QRS. Do not display threshold crossings as R peaks.
+      if SamplesBuffer[I].IsSimulated and (SamplesBuffer[I].ExpectedRhythm = 'VFIB') then
+        Rec.IsPeak := False;
       SamplesBuffer[I].FilteredValue := Rec.FilteredValue;
       SamplesBuffer[I].IsPeak := Rec.IsPeak;
 
@@ -807,6 +849,13 @@ begin
   Stats := FDSP.GetCurrentStats;
   if (FCurrentSource <> nil) and FCurrentSource.IsRunning then
   begin
+    if not FCurrentSource.IsHardware and (FSimParams.RhythmType = rtVentricularFibrillation) then
+    begin
+      lblBPMValue2.Caption := '--';
+      lblHeartStatus2.Caption := 'FV simulada: sem QRS organizado';
+      lblBPMValue2.Font.Color := clYellow;
+      Exit;
+    end;
     if Stats.BPM > 0 then
     begin
       lblBPMValue2.Caption := IntToStr(Stats.BPM);
@@ -871,6 +920,16 @@ begin
     ]);
     lblGTGenerated.Font.Color := clWhite;
 
+    if FSimParams.RhythmType in [rtAtrialFlutter, rtSupraventricularTachycardia,
+      rtVentricularTachycardia, rtVentricularFibrillation] then
+    begin
+      lblGTDetected.Caption := 'Detector atual: classificacao deste ritmo nao implementada';
+      lblGTDetected.Font.Color := clYellow;
+      lblGTStatus.Caption := 'Simulacao didatica ativa - ritmo definido pelo gerador';
+      lblGTStatus.Font.Color := clYellow;
+      Exit;
+    end;
+
     // Deteccao real baseada estritamente nas metricas fisicas do sinal captadas pelo DSP
     if Stats.BPM > 105 then
       DetCode := 'TACHY'
@@ -930,6 +989,8 @@ begin
   if PatientName = '' then PatientName := 'Paciente Anonimo';
 
   FRecordedExamId := FDatabase.StartExam(PatientName, 'Aquisicao 500 Hz (' + FCurrentSource.GetDescription + ')');
+  FRecordedIsSimulated := not FCurrentSource.IsHardware;
+  FRecordedRhythm := FSimParams.RhythmType;
   FRecordedCount := 0;
   FRecordStartTick := GetTickCount64;
   FIsRecording := True;
@@ -949,7 +1010,8 @@ begin
 
   DurSec := (GetTickCount64 - FRecordStartTick) / 1000.0;
   AvgBPM := FDSP.CurrentBPM;
-  if AvgBPM <= 0 then AvgBPM := 72.0;
+  if (FRecordedIsSimulated and (FRecordedRhythm = rtVentricularFibrillation)) or (AvgBPM <= 0) then
+    AvgBPM := 0.0;
 
   try
     FDatabase.FinishExam(FRecordedExamId, DurSec, AvgBPM);
@@ -1005,13 +1067,14 @@ end;
 procedure TMainForm.btnRunPythonClick(Sender: TObject);
 var
   AProcess: TProcess;
-  PythonExe, ScriptPath, OutJsonPath, JsonStr: String;
+  PythonExe, ScriptPath, OutJsonPath, JsonStr, Diagnostico: String;
   JSONData: TJSONData;
   JSONObj: TJSONObject;
   EventsArr: TJSONArray;
   I: Integer;
   P: PYOLO1DEvent;
   EventObj: TJSONObject;
+  CargaPct: Double;
 begin
   PythonExe := 'python';
   ScriptPath := ExtractFilePath(ParamStr(0)) + 'ai' + PathDelim + 'yolo1d' + PathDelim + 'predict.py';
@@ -1053,12 +1116,15 @@ begin
         if JSONData is TJSONObject then
         begin
           JSONObj := TJSONObject(JSONData);
+          Diagnostico := JSONObj.Get('diagnostico', '');
+          CargaPct := JSONObj.Get('carga_arritmica_pct', 0.0);
+
           EventsArr := JSONObj.Get('events', TJSONArray(nil));
+          TYOLO1DDetector.FreeEventsList(FYOLOEvents);
+          FYOLOEvents := TFPList.Create;
+
           if EventsArr <> nil then
           begin
-            TYOLO1DDetector.FreeEventsList(FYOLOEvents);
-            FYOLOEvents := TFPList.Create;
-
             for I := 0 to EventsArr.Count - 1 do
             begin
               EventObj := EventsArr.Objects[I];
@@ -1073,19 +1139,31 @@ begin
               P^.Color := TYOLO1DDetector.HexToColor(EventObj.Get('color', '#00E676'));
               FYOLOEvents.Add(P);
             end;
-
-            FYOLOSummary := TYOLO1DDetector.CalculateSummary(FYOLOEvents);
-            DrawAnalysisWaveform;
-            PopulateGridEvents;
-
-            ShowMessage('Inferencia Python (YOLO 1D) executada com sucesso!' + sLineBreak +
-                        'Total de eventos detectados: ' + IntToStr(FYOLOEvents.Count));
           end;
+
+          FYOLOSummary := TYOLO1DDetector.CalculateSummary(FYOLOEvents);
+          FYOLOSummary.ArrhythmiaPct := CargaPct;
+
+          DrawAnalysisWaveform;
+          PopulateGridEvents;
+
+          lblTotalEventsVal.Caption := 'Total de Batimentos: ' + IntToStr(FYOLOSummary.TotalEvents);
+          lblNormalEventsVal.Caption := 'Normais (Classe N): ' + IntToStr(FYOLOSummary.NormalCount);
+          lblPVCEventsVal.Caption := 'Ventriculares (PVC / V): ' + IntToStr(FYOLOSummary.PVCCount);
+          lblArrhythmiaVal.Caption := Format('Carga Arritmica: %.1f%%', [CargaPct]);
+          if Diagnostico <> '' then
+            lblYOLONote.Caption := 'LAUDO IA (Fase 1 YOLO + Fase 2 Clinica):' + sLineBreak + Diagnostico;
+
+          ShowMessage('Inferencia em 2 Fases (YOLO 1D + Clinica) concluida!' + sLineBreak + sLineBreak +
+                      'Diagnostico: ' + Diagnostico + sLineBreak +
+                      'Batimentos identificados: ' + IntToStr(FYOLOEvents.Count));
         end;
       finally
         JSONData.Free;
       end;
-    end;
+    end
+    else
+      ShowMessage('Erro: A inferencia Python nao gerou o arquivo de saida.');
   finally
     AProcess.Free;
   end;

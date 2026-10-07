@@ -16,7 +16,11 @@ type
     rtPVC,
     rtPAC,
     rtSinusTachycardia,
-    rtSinusBradycardia
+    rtSinusBradycardia,
+    rtAtrialFlutter,
+    rtSupraventricularTachycardia,
+    rtVentricularTachycardia,
+    rtVentricularFibrillation
   );
 
   { Nivel de Qualidade de Sinal }
@@ -34,7 +38,8 @@ type
     FilteredValue: Double;
     LeadOff: Boolean;
     IsSimulated: Boolean;
-    ExpectedClass: String; // Ground truth: "N", "AFIB", "PVC", "PAC", "TACHY", "BRADY"
+    ExpectedClass: String; // Beat label: N, S, V, Q; independent of rhythm.
+    ExpectedRhythm: String; // Synthetic rhythm provenance, not a diagnosis.
     IsPeak: Boolean;
   end;
 
@@ -103,8 +108,18 @@ type
     function IsHardware: Boolean;
   end;
 
+const
+  ECG_SAMPLE_RATE = 500;
+  // Display/export order follows the ten-rhythm reference chart.
+  ECG_RHYTHMS: array[0..9] of TECGRhythmType = (
+    rtNormal, rtSinusBradycardia, rtSinusTachycardia,
+    rtAtrialFibrillation, rtAtrialFlutter, rtSupraventricularTachycardia,
+    rtPAC, rtPVC, rtVentricularTachycardia, rtVentricularFibrillation
+  );
+
 function RhythmTypeToString(RT: TECGRhythmType): String;
 function RhythmTypeToCode(RT: TECGRhythmType): String;
+function RhythmDatasetFolder(RT: TECGRhythmType): String;
 
 implementation
 
@@ -117,6 +132,10 @@ begin
     rtPAC: Result := 'Extrassistole Atrial (PAC)';
     rtSinusTachycardia: Result := 'Taquicardia Sinusal';
     rtSinusBradycardia: Result := 'Bradicardia Sinusal';
+    rtAtrialFlutter: Result := 'Flutter Atrial (4:1)';
+    rtSupraventricularTachycardia: Result := 'Taquicardia Supraventricular';
+    rtVentricularTachycardia: Result := 'Taquicardia Ventricular';
+    rtVentricularFibrillation: Result := 'Fibrilacao Ventricular';
   else
     Result := 'Desconhecido';
   end;
@@ -127,12 +146,32 @@ begin
   case RT of
     rtNormal: Result := 'N';
     rtAtrialFibrillation: Result := 'AFIB';
-    rtPVC: Result := 'V';
-    rtPAC: Result := 'S';
+    rtPVC: Result := 'PVC';
+    rtPAC: Result := 'PAC';
     rtSinusTachycardia: Result := 'TACHY';
     rtSinusBradycardia: Result := 'BRADY';
+    rtAtrialFlutter: Result := 'AFLUT';
+    rtSupraventricularTachycardia: Result := 'SVT';
+    rtVentricularTachycardia: Result := 'VT';
+    rtVentricularFibrillation: Result := 'VFIB';
   else
     Result := 'Q';
+  end;
+end;
+
+function RhythmDatasetFolder(RT: TECGRhythmType): String;
+begin
+  case RT of
+    rtNormal: Result := 'normal';
+    rtSinusBradycardia: Result := 'bradycardia';
+    rtSinusTachycardia: Result := 'tachycardia';
+    rtAtrialFibrillation: Result := 'afib';
+    rtAtrialFlutter: Result := 'atrial_flutter';
+    rtSupraventricularTachycardia: Result := 'svt';
+    rtPAC: Result := 'pac';
+    rtPVC: Result := 'pvc';
+    rtVentricularTachycardia: Result := 'vt';
+    rtVentricularFibrillation: Result := 'vfib';
   end;
 end;
 
@@ -163,9 +202,14 @@ var
   RawVal: Double;
   LeadsOff: Boolean;
   Sample: TECGSample;
-  Timestamp: Int64;
+  ParsedUs: Int64;
+  LastParsedUs: Int64;
+  EpochOffsetUs: Int64;
+  MonotonicUs: Int64;
 begin
   LineBuffer := '';
+  LastParsedUs := -1;
+  EpochOffsetUs := 0;
   while not Terminated and FOwner.FIsRunning do
   begin
     BytesRead := SerReadTimeout(FOwner.FSerialHandle, Buffer, 10);
@@ -180,15 +224,15 @@ begin
           begin
             if LineBuffer[1] <> '#' then
             begin
-              Timestamp := GetTickCount64 * 1000;
               LeadsOff := False;
               RawVal := 512.0;
+              ParsedUs := -1;
 
               // Protocolo v2: timestamp_us,adc,lead_off
               if Pos(',', LineBuffer) > 0 then
               begin
                 P1 := Pos(',', LineBuffer);
-                Timestamp := StrToInt64Def(Copy(LineBuffer, 1, P1 - 1), Timestamp);
+                ParsedUs := StrToInt64Def(Copy(LineBuffer, 1, P1 - 1), -1);
                 Part2 := Copy(LineBuffer, P1 + 1, Length(LineBuffer));
                 P2 := Pos(',', Part2);
                 if P2 > 0 then
@@ -207,12 +251,24 @@ begin
               else
                 RawVal := StrToFloatDef(LineBuffer, 512.0);
 
-              Sample.TimestampUS := Timestamp;
+              // Tratamento de monotonicidade e overflow de 32 bits (4294.96s ~ 71.5 min)
+              if ParsedUs >= 0 then
+              begin
+                if (LastParsedUs >= 0) and (ParsedUs < LastParsedUs) and ((LastParsedUs - ParsedUs) > $7FFFFFFF) then
+                  Inc(EpochOffsetUs, Int64($100000000));
+                LastParsedUs := ParsedUs;
+                MonotonicUs := EpochOffsetUs + ParsedUs;
+              end
+              else
+                MonotonicUs := GetTickCount64 * 1000;
+
+              Sample.TimestampUS := MonotonicUs;
               Sample.RawValue := RawVal;
-              Sample.FilteredValue := RawVal - 512.0;
+              Sample.FilteredValue := 0.0;
               Sample.LeadOff := LeadsOff;
               Sample.IsSimulated := False;
               Sample.ExpectedClass := 'REAL';
+              Sample.ExpectedRhythm := 'REAL';
               Sample.IsPeak := False;
 
               FOwner.PushSample(Sample);

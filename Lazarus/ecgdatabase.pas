@@ -225,6 +225,7 @@ begin
         Q.SQL.Text := 'UPDATE exames SET duracao_seg = :duracao, bpm_medio = :bpm WHERE id = :id;';
         Q.Params.ParamByName('duracao').AsFloat := ADuracaoSeg;
         Q.Params.ParamByName('bpm').AsFloat := ABpmMedio;
+        if ABpmMedio <= 0 then Q.Params.ParamByName('bpm').Clear;
         Q.Params.ParamByName('id').AsLargeInt := AExamId;
         Q.ExecSQL;
         FTrans.CommitRetaining;
