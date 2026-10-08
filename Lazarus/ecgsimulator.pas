@@ -249,6 +249,7 @@ begin
   PCenter := -1000 * (FParams.PRInterval + FParams.QRSDuration / 2 - FParams.PDuration / 2);
   TCenter := 1000 * (FParams.QTInterval - FParams.QRSDuration / 2 - FParams.TDuration / 2);
   P := FParams.PAmplitude * Gaussian(D, PCenter, FParams.PDuration * 250);
+  if FParams.RhythmType in [rtAtrialFibrillation, rtAtrialFlutter, rtSupraventricularTachycardia] then P := 0;
   if ABeat.BeatClass = 'S' then
     P := -25 * Gaussian(D, -130, 16) + 38 * Gaussian(D, -105, 16);
   Result := P + FParams.QAmplitude * Gaussian(D, -24 * WidthScale, 8 * WidthScale) +
@@ -271,6 +272,8 @@ begin
     Result.ExpectedRhythm := RhythmTypeToCode(FParams.RhythmType);
     Result.IsSimulated := True;
     Result.LeadOff := False;
+    Result.Discontinuity := False;
+    Result.SignalInvalid := False;
     Result.IsPeak := False;
     if FParams.RhythmType = rtVentricularFibrillation then
     begin

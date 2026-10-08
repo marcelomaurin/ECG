@@ -175,6 +175,9 @@ type
     FUpdatingSimControls: Boolean;
     FSamplesCount: Int64;
     FLastStatsTick: QWord;
+    FLastSampleTick: QWord;
+    FNotchBox: TCheckBox;
+
 
     // Gravacao SQLite
     FIsRecording: Boolean;
@@ -184,11 +187,13 @@ type
     FRecordedRhythm: TECGRhythmType;
     FRecordedSamples: array[0..9999] of Double;
     FRecordedCount: Integer;
+    FRecordedQualityOK: Boolean;
 
     // Eventos detectados pelo YOLO 1D
     FYOLOEvents: TFPList;
     FYOLOSummary: TYOLO1DSummary;
 
+    procedure NotchChanged(Sender: TObject);
     procedure InitBackBuffer;
     procedure InitAnalysisBuffer;
     procedure DrawGrid(ACanvas: TCanvas; AWidth, AHeight: Integer);
@@ -268,6 +273,12 @@ begin
   FGain := 0.45;
   FSamplesCount := 0;
   FLastStatsTick := 0;
+  FNotchBox := TCheckBox.Create(Self);
+  FNotchBox.Parent := gbHardwareConfig;
+  FNotchBox.SetBounds(10, 134, 300, 24);
+  FNotchBox.Caption := 'Filtro de rede 60 Hz (opcional)';
+  FNotchBox.Font.Color := clWhite;
+  FNotchBox.OnChange := @NotchChanged;
 
   // Carrega a imagem dos 3 pontos de eletrodos na Etapa 1
   ImgPath := ExtractFilePath(ParamStr(0)) + 'img' + PathDelim + 'eletrodos_3pontos.jpg';
@@ -629,6 +640,11 @@ begin
     StartAcquisition;
 end;
 
+procedure TMainForm.NotchChanged(Sender: TObject);
+begin
+  FDSP.EnableNotch := FNotchBox.Checked;
+end;
+
 procedure TMainForm.StartAcquisition;
 var
   Port: String;
@@ -656,11 +672,11 @@ begin
   FCurrentSource.Start;
   if not FCurrentSource.IsRunning then
   begin
-    ShowMessage('Falha ao iniciar aquisicao. Verifique a porta selecionada ou permissoes.');
-    StopAcquisition;
+    FCurrentSource := nil;
+    ShowMessage('Nao foi possivel abrir a porta serial. Verifique a porta e outros programas.');
     Exit;
   end;
-
+  FLastSampleTick := GetTickCount64;
   TimerUI.Enabled := True;
 
   if rbSourceHardware.Checked then
@@ -780,15 +796,18 @@ begin
   Count := FCurrentSource.ReadAllSamples(SamplesBuffer);
   if Count > 0 then
   begin
+    FLastSampleTick := GetTickCount64;
     for I := 0 to Count - 1 do
     begin
       // Processa pelo pipeline unificado de DSP (Filtros passa-alta, passa-baixa, remocao 60Hz, deteccao QRS)
+      if SamplesBuffer[I].Discontinuity then FDSP.Reset;
       Rec := FDSP.ProcessSample(SamplesBuffer[I].RawValue, SamplesBuffer[I].TimestampUS div 1000, SamplesBuffer[I].LeadOff);
       // VF has no organized QRS. Do not display threshold crossings as R peaks.
       if SamplesBuffer[I].IsSimulated and (SamplesBuffer[I].ExpectedRhythm = 'VFIB') then
         Rec.IsPeak := False;
       SamplesBuffer[I].FilteredValue := Rec.FilteredValue;
       SamplesBuffer[I].IsPeak := Rec.IsPeak;
+      SamplesBuffer[I].SignalInvalid := not FDSP.SignalValid;
 
       DrawECGSample(SamplesBuffer[I], Rec.IsPeak);
       Inc(FSamplesCount);
@@ -796,6 +815,8 @@ begin
       // Grava no buffer de exame se estiver gravando
       if FIsRecording then
       begin
+        if SamplesBuffer[I].SignalInvalid or SamplesBuffer[I].Discontinuity then
+          FRecordedQualityOK := False;
         if FRecordedCount < Length(FRecordedSamples) then
         begin
           FRecordedSamples[FRecordedCount] := Rec.FilteredValue;
@@ -809,6 +830,12 @@ begin
       FDatabase.InsertSamplesBatch(FRecordedExamId, SamplesBuffer, Count);
 
     PaintBoxECG.Invalidate;
+  end;
+
+  if GetTickCount64-FLastSampleTick > 1000 then
+  begin
+    FDSP.Reset;
+    if FIsRecording then FRecordedQualityOK := False;
   end;
 
   // Atualiza gravador e temporizador
@@ -825,7 +852,7 @@ begin
     if ElapsedSec >= 10.0 then
     begin
       StopRecording;
-      ShowMessage('Gravacao de 10 segundos (5000 amostras) concluida com sucesso no SQLite!' + sLineBreak +
+      ShowMessage(Format('Gravacao encerrada: %d amostras recebidas.', [FRecordedCount]) + sLineBreak +
                   'Avancando automaticamente para a Etapa 3 (Analise YOLO 1D).');
       PageControlMain.ActivePageIndex := 2;
       LoadExamToStage3(FRecordedExamId);
@@ -865,7 +892,11 @@ begin
     else
     begin
       lblBPMValue2.Caption := '--';
-      lblHeartStatus2.Caption := 'Aguardando Ritmo...';
+      if GetTickCount64-FLastSampleTick>1000 then
+        lblHeartStatus2.Caption := 'Sem dados: confira serial e firmware'
+      else if not FDSP.SignalValid then
+        lblHeartStatus2.Caption := 'Estabilizando / confira eletrodos'
+      else lblHeartStatus2.Caption := 'Aguardando batimentos...';
       lblBPMValue2.Font.Color := clYellow;
     end;
     StatusBar1.Panels[0].Text := 'Status: Aquisicao Ativa (500 Hz)';
@@ -984,6 +1015,12 @@ var
 begin
   if (FCurrentSource = nil) or not FCurrentSource.IsRunning then
     StartAcquisition;
+  if (FCurrentSource=nil) or not FCurrentSource.IsRunning then Exit;
+  if not FDSP.SignalValid then
+  begin
+    ShowMessage('Aguarde dois segundos de sinal continuo e estavel antes de gravar.');
+    Exit;
+  end;
 
   PatientName := Trim(edtPatient.Text);
   if PatientName = '' then PatientName := 'Paciente Anonimo';
@@ -993,6 +1030,7 @@ begin
   FRecordedRhythm := FSimParams.RhythmType;
   FRecordedCount := 0;
   FRecordStartTick := GetTickCount64;
+  FRecordedQualityOK := True;
   FIsRecording := True;
 
   btnRecordToggle.Caption := '[#] Parar Gravacao';
@@ -1010,8 +1048,8 @@ begin
 
   DurSec := (GetTickCount64 - FRecordStartTick) / 1000.0;
   AvgBPM := FDSP.CurrentBPM;
-  if (FRecordedIsSimulated and (FRecordedRhythm = rtVentricularFibrillation)) or (AvgBPM <= 0) then
-    AvgBPM := 0.0;
+  if not FRecordedQualityOK then AvgBPM := 0;
+  if FRecordedIsSimulated and (FRecordedRhythm = rtVentricularFibrillation) then AvgBPM := 0;
 
   try
     FDatabase.FinishExam(FRecordedExamId, DurSec, AvgBPM);
@@ -1031,8 +1069,14 @@ var
 begin
   if AExamId > 0 then
   begin
-    if FDatabase.LoadExamSamples(AExamId, FRecordedSamples, Count) then
-      FRecordedCount := Count;
+      if FDatabase.LoadExamSamples(AExamId, FRecordedSamples, Count) then
+        FRecordedCount := Count
+      else
+      begin
+        FRecordedCount := 0;
+        ShowMessage('Exame preservado no SQLite, mas sem janela valida para analise: houve perda de dados, eletrodo solto, saturacao ou qualidade nao avaliada.');
+        Exit;
+      end;
   end;
 
   lblExamInfo.Caption := Format('Exame #%d | Paciente: %s | Janela: %.1fs (%d amostras) | SQLite', [
@@ -1044,6 +1088,11 @@ end;
 
 procedure TMainForm.btnRunYOLOClick(Sender: TObject);
 begin
+  if (FRecordedCount>0) and not FRecordedQualityOK then
+  begin
+    ShowMessage('Gravacao com interrupcao ou sinal invalido. Repita a gravacao antes da analise.');
+    Exit;
+  end;
   if FRecordedCount < 100 then
   begin
     ShowMessage('Nenhum exame gravado para analise!' + sLineBreak +
@@ -1052,6 +1101,18 @@ begin
   end;
 
   TYOLO1DDetector.FreeEventsList(FYOLOEvents);
+  if FRecordedIsSimulated and (FRecordedRhythm in [rtAtrialFlutter,
+    rtSupraventricularTachycardia, rtVentricularTachycardia, rtVentricularFibrillation]) then
+  begin
+    FillChar(FYOLOSummary, SizeOf(FYOLOSummary), 0);
+    DrawAnalysisWaveform;
+    PopulateGridEvents;
+    lblTotalEventsVal.Caption := 'Simulacao: ' + RhythmTypeToCode(FRecordedRhythm);
+    lblNormalEventsVal.Caption := 'Normais: nao avaliado';
+    lblPVCEventsVal.Caption := 'PVC: nao avaliado';
+    lblArrhythmiaVal.Caption := 'Classificacao deste ritmo ainda nao implementada';
+    Exit;
+  end;
   FYOLOEvents := TYOLO1DDetector.DetectEvents(FRecordedSamples, FRecordedCount, 500.0);
   FYOLOSummary := TYOLO1DDetector.CalculateSummary(FYOLOEvents);
 
@@ -1076,6 +1137,11 @@ var
   EventObj: TJSONObject;
   CargaPct: Double;
 begin
+  if not FRecordedQualityOK then
+  begin
+    ShowMessage('Gravacao sem janela valida para analise. Repita a aquisicao.');
+    Exit;
+  end;
   PythonExe := 'python';
   ScriptPath := ExtractFilePath(ParamStr(0)) + 'ai' + PathDelim + 'yolo1d' + PathDelim + 'predict.py';
   if not FileExists(ScriptPath) then

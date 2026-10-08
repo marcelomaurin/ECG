@@ -208,3 +208,7 @@ https://how2electronics.com/ecg-monitoring-with-ad8232-ecg-sensor-arduino/
 
 My article about ECG:
 https://maurinsoft.com.br/wp/leitor-ecg/
+
+## Nano AD8232: aquisicao atualizada
+
+Veja [firmware, mapa de pinos, filtros e verificacoes](docs/NANO_AD8232.md). Firmware: firmware/arduino_ad8232/arduino_ad8232.ino; protocolo v3, 500 Hz, 115200 baud. Filtros: 0,5-40 Hz, notch de 60 Hz opcional. Testes: tests/run_acquisition_tests.ps1 e tests/run_simulator_tests.ps1.

@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, syncobjs,
-  serial, ecgtypes;
+  serial, ecgtypes, ecgprotocol;
 
 type
   { Tipos de Ritmo Simulados }
@@ -41,6 +41,7 @@ type
     ExpectedClass: String; // Beat label: N, S, V, Q; independent of rhythm.
     ExpectedRhythm: String; // Synthetic rhythm provenance, not a diagnosis.
     IsPeak: Boolean;
+    Discontinuity, SignalInvalid: Boolean;
   end;
 
   PECGSample = ^TECGSample;
@@ -195,94 +196,34 @@ end;
 
 procedure TSerialWorkerThread.Execute;
 var
-  Buffer: array[0..255] of Char;
+  Buffer: array[0..255] of Byte;
   BytesRead, I: Integer;
-  LineBuffer, Part2: String;
-  P1, P2: Integer;
-  RawVal: Double;
-  LeadsOff: Boolean;
+  Parser: TECGProtocol;
+  Frame: TECGSerialFrame;
   Sample: TECGSample;
-  ParsedUs: Int64;
-  LastParsedUs: Int64;
-  EpochOffsetUs: Int64;
-  MonotonicUs: Int64;
 begin
-  LineBuffer := '';
-  LastParsedUs := -1;
-  EpochOffsetUs := 0;
-  while not Terminated and FOwner.FIsRunning do
-  begin
-    BytesRead := SerReadTimeout(FOwner.FSerialHandle, Buffer, 10);
-    if BytesRead > 0 then
+  Parser := TECGProtocol.Create;
+  try
+    while not Terminated do
     begin
-      for I := 0 to BytesRead - 1 do
-      begin
-        if (Buffer[I] = #10) or (Buffer[I] = #13) then
-        begin
-          LineBuffer := Trim(LineBuffer);
-          if LineBuffer <> '' then
+      BytesRead := SerReadTimeout(FOwner.FSerialHandle, Buffer, SizeOf(Buffer), 10);
+      if BytesRead > 0 then
+        for I := 0 to BytesRead-1 do
+          if Parser.Feed(Char(Buffer[I]), Frame) then
           begin
-            if LineBuffer[1] <> '#' then
-            begin
-              LeadsOff := False;
-              RawVal := 512.0;
-              ParsedUs := -1;
-
-              // Protocolo v2: timestamp_us,adc,lead_off
-              if Pos(',', LineBuffer) > 0 then
-              begin
-                P1 := Pos(',', LineBuffer);
-                ParsedUs := StrToInt64Def(Copy(LineBuffer, 1, P1 - 1), -1);
-                Part2 := Copy(LineBuffer, P1 + 1, Length(LineBuffer));
-                P2 := Pos(',', Part2);
-                if P2 > 0 then
-                begin
-                  RawVal := StrToFloatDef(Copy(Part2, 1, P2 - 1), 512.0);
-                  LeadsOff := (Trim(Copy(Part2, P2 + 1, Length(Part2))) = '1');
-                end
-                else
-                  RawVal := StrToFloatDef(Part2, 512.0);
-              end
-              else if LineBuffer = '!' then
-              begin
-                LeadsOff := True;
-                RawVal := 512.0;
-              end
-              else
-                RawVal := StrToFloatDef(LineBuffer, 512.0);
-
-              // Tratamento de monotonicidade e overflow de 32 bits (4294.96s ~ 71.5 min)
-              if ParsedUs >= 0 then
-              begin
-                if (LastParsedUs >= 0) and (ParsedUs < LastParsedUs) and ((LastParsedUs - ParsedUs) > $7FFFFFFF) then
-                  Inc(EpochOffsetUs, Int64($100000000));
-                LastParsedUs := ParsedUs;
-                MonotonicUs := EpochOffsetUs + ParsedUs;
-              end
-              else
-                MonotonicUs := GetTickCount64 * 1000;
-
-              Sample.TimestampUS := MonotonicUs;
-              Sample.RawValue := RawVal;
-              Sample.FilteredValue := 0.0;
-              Sample.LeadOff := LeadsOff;
-              Sample.IsSimulated := False;
-              Sample.ExpectedClass := 'REAL';
-              Sample.ExpectedRhythm := 'REAL';
-              Sample.IsPeak := False;
-
-              FOwner.PushSample(Sample);
-            end;
-            LineBuffer := '';
+            Sample.TimestampUS := Frame.TimestampUS;
+            Sample.RawValue := Frame.ADC;
+            Sample.FilteredValue := 0;
+            Sample.LeadOff := Frame.LeadOff;
+            Sample.Discontinuity := Frame.Discontinuity;
+            Sample.SignalInvalid := Frame.LeadOff;
+            Sample.IsSimulated := False;
+            Sample.ExpectedClass := 'REAL'; Sample.ExpectedRhythm := 'REAL';
+            Sample.IsPeak := False;
+            FOwner.PushSample(Sample);
           end;
-        end
-        else
-          LineBuffer := LineBuffer + Buffer[I];
-      end;
-    end
-    else
-      Sleep(1);
-  end;
+    end;
+  finally Parser.Free; end;
 end;
 
 { TSerialECGSource }
@@ -322,6 +263,7 @@ begin
     else
     begin
       FQueueTail := (FQueueTail + 1) mod Length(FQueue);
+      FQueue[FQueueTail].Discontinuity := True;
       FQueue[FQueueHead] := S;
       FQueueHead := NextHead;
     end;
@@ -331,6 +273,7 @@ begin
 end;
 
 procedure TSerialECGSource.Start;
+const Query: array[0..1] of Char = ('?', #10);
 var
   CleanPort: String;
 begin
@@ -346,6 +289,7 @@ begin
   if FSerialHandle > 0 then
   begin
     SerSetParams(FSerialHandle, FBaudRate, 8, NoneParity, 1, []);
+    SerWrite(FSerialHandle, Query, SizeOf(Query));
     FIsRunning := True;
     FThread := TSerialWorkerThread.Create(Self);
     FThread.Start;

@@ -110,6 +110,7 @@ begin
 end;
 
 procedure TECGDatabase.CreateTables;
+var Q: TSQLQuery; HasInvalid, HasGap: Boolean;
 begin
   FConn.ExecuteDirect(
     'CREATE TABLE IF NOT EXISTS exames (' +
@@ -148,6 +149,22 @@ begin
     ');'
   );
 
+  HasInvalid := False; HasGap := False;
+  Q := TSQLQuery.Create(nil);
+  try
+    Q.DataBase := FConn; Q.Transaction := FTrans;
+    Q.SQL.Text := 'PRAGMA table_info(amostras)'; Q.Open;
+    while not Q.EOF do
+    begin
+      if Q.FieldByName('name').AsString='signal_invalid' then HasInvalid := True;
+      if Q.FieldByName('name').AsString='discontinuity' then HasGap := True;
+      Q.Next;
+    end;
+    Q.Close;
+  finally Q.Free; end;
+  // Historical rows have no quality assessment: do not silently mark them valid.
+  if not HasInvalid then FConn.ExecuteDirect('ALTER TABLE amostras ADD COLUMN signal_invalid INTEGER DEFAULT 1');
+  if not HasGap then FConn.ExecuteDirect('ALTER TABLE amostras ADD COLUMN discontinuity INTEGER DEFAULT 0');
   FConn.ExecuteDirect('CREATE INDEX IF NOT EXISTS idx_amostras_exame ON amostras(exame_id);');
   FConn.ExecuteDirect('CREATE INDEX IF NOT EXISTS idx_eventos_exame ON eventos_yolo(exame_id);');
 
@@ -261,8 +278,8 @@ begin
       try
         Q.DataBase := FConn;
         Q.Transaction := FTrans;
-        Q.SQL.Text := 'INSERT INTO amostras (exame_id, timestamp_us, raw_adc, filtered_val, lead_off, r_peak) ' +
-                      'VALUES (:exame_id, :timestamp_us, :raw_adc, :filtered_val, :lead_off, :r_peak);';
+        Q.SQL.Text := 'INSERT INTO amostras (exame_id, timestamp_us, raw_adc, filtered_val, lead_off, r_peak, signal_invalid, discontinuity) ' +
+                      'VALUES (:exame_id, :timestamp_us, :raw_adc, :filtered_val, :lead_off, :r_peak, :invalid, :gap);';
 
         for I := 0 to ACount - 1 do
         begin
@@ -272,6 +289,8 @@ begin
           Q.Params.ParamByName('filtered_val').AsFloat := ASamples[I].FilteredValue;
           Q.Params.ParamByName('lead_off').AsInteger := Ord(ASamples[I].LeadOff);
           Q.Params.ParamByName('r_peak').AsInteger := Ord(ASamples[I].IsPeak);
+          Q.Params.ParamByName('invalid').AsInteger := Ord(ASamples[I].SignalInvalid);
+          Q.Params.ParamByName('gap').AsInteger := Ord(ASamples[I].Discontinuity);
           Q.ExecSQL;
         end;
         FTrans.CommitRetaining;
@@ -310,12 +329,16 @@ begin
       try
         Q.DataBase := FConn;
         Q.Transaction := FTrans;
-        Q.SQL.Text := 'SELECT filtered_val FROM amostras WHERE exame_id = :id ORDER BY id ASC LIMIT :max_s;';
+        Q.SQL.Text := 'SELECT filtered_val, lead_off, signal_invalid, discontinuity FROM amostras WHERE exame_id = :id ORDER BY id ASC LIMIT :max_s;';
         Q.Params.ParamByName('id').AsLargeInt := AExamId;
         Q.Params.ParamByName('max_s').AsInteger := MaxSamples;
         Q.Open;
         while not Q.EOF and (ACount < MaxSamples) do
         begin
+          if (Q.FieldByName('lead_off').AsInteger<>0) or
+             (Q.FieldByName('signal_invalid').AsInteger<>0) or
+             (Q.FieldByName('discontinuity').AsInteger<>0) then
+          begin ACount := 0; Exit(False); end;
           ASamples[ACount] := Q.FieldByName('filtered_val').AsFloat;
           Inc(ACount);
           Q.Next;

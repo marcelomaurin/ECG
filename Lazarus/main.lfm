@@ -189,7 +189,7 @@
               Top = 12
               Width = 620
               AutoSize = False
-              Caption = '● VERMELHO (RA): Braco Direito / Regiao Infraclavicular Direita'#13#10'   Fixar logo abaixo da clavicula direita, sobre pele limpa e seca.'
+              Caption = 'RA: Regiao Infraclavicular Direita (confira a identificacao do cabo)'#13#10'   Fixar logo abaixo da clavicula direita, sobre pele limpa e seca.'
               Font.Color = 33023
               Font.Height = -13
               Font.Style = [fsBold]
@@ -202,7 +202,7 @@
               Top = 68
               Width = 620
               AutoSize = False
-              Caption = '● AMARELO (LA): Braco Esquerdo / Regiao Infraclavicular Esquerda'#13#10'   Fixar logo abaixo da clavicula esquerda.'
+              Caption = 'LA: Regiao Inferior Esquerda do Torax (exemplo semelhante a DII)'#13#10'   Fixar na regiao inferior esquerda; as cores dependem do cabo.'
               Font.Color = 65535
               Font.Height = -13
               Font.Style = [fsBold]
@@ -215,7 +215,7 @@
               Top = 124
               Width = 620
               AutoSize = False
-              Caption = '● VERDE (RL / GND): Referencia / Perna Direita ou Costela Inferior Direita'#13#10'   Eletrodo de aterramento e rejeicao de modo comum (Right Leg Drive).'
+              Caption = 'RL: Eletrodo RLD / Regiao Inferior Direita'#13#10'   Saida ativa para reduzir modo comum; nao ligar ao terra da rede.'
               Font.Color = 65280
               Font.Height = -13
               Font.Style = [fsBold]
@@ -242,7 +242,7 @@
               Top = 8
               Width = 620
               AutoSize = False
-              Caption = '1. Higienize a regiao dos eletrodos com alcool 70% e aguarde a secagem completa.'#13#10'2. O paciente deve permanecer em repouso absoluto para evitar interferencia muscular (EMG).'#13#10'3. AVISO: Dispositivo experimental e didatico. Nao substitui avaliacao medica.'#13#10'4. Utilize o computador operando em bateria para total isolamento eletrico.'
+              Caption = '1. Higienize a regiao dos eletrodos com alcool 70% e aguarde a secagem completa.'#13#10'2. O paciente deve permanecer em repouso absoluto para evitar interferencia muscular (EMG).'#13#10'3. AVISO: Dispositivo experimental e didatico. Nao substitui avaliacao medica.'#13#10'4. Use isolamento apropriado; operar em bateria nao certifica isolamento medico.'
               Font.Color = 12632256
               Font.Height = -12
               Font.Style = []

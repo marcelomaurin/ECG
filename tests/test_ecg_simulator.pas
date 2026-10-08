@@ -151,6 +151,24 @@ begin
     finally Source.Free; end;
     WriteLn('PASS flutter 4:1 atrial activity');
 
+    // AF/flutter/SVT presets cannot acquire an organized sinus P from a custom slider.
+    for R := Low(TECGRhythmType) to High(TECGRhythmType) do
+      if R in [rtAtrialFibrillation, rtAtrialFlutter, rtSupraventricularTachycardia] then
+      begin
+        P := GetDefaultWaveParameters(R);
+        Source := TSimulatedECGSource.Create(P,77);
+        P.PAmplitude := 200;
+        Other := TSimulatedECGSource.Create(P,77);
+        try
+          for I:=0 to 999 do
+          begin
+            S:=Source.ComputeNextSample(0); T:=Other.ComputeNextSample(0);
+            Check(Abs(S.RawValue-T.RawValue)<1e-8,'Inconsistent sinus P in '+RhythmTypeToCode(R));
+          end;
+        finally Source.Free; Other.Free; end;
+      end;
+    WriteLn('PASS absence of organized sinus P in AF/flutter/SVT');
+
     P := GetDefaultWaveParameters(rtAtrialFibrillation);
     Source := TSimulatedECGSource.Create(P, 1234);
     Other := TSimulatedECGSource.Create(P, 1234);
