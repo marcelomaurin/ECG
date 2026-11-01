@@ -15,6 +15,7 @@ type
     FVersion: Integer;
     FPrevious: Int64;
     FTime: Int64;
+    FLegacyCount: Int64;
     function Parse(out Frame: TECGSerialFrame): Boolean;
   public
     function Feed(C: Char; out Frame: TECGSerialFrame): Boolean;
@@ -41,9 +42,25 @@ begin
     else begin FVersion := 0; FPendingGap := True; end;
     Exit;
   end;
-  if (FLine='') or (FLine[1]='#') then Exit;
+  if FLine='' then Exit;
+  if FLine[1]='#' then Exit;
+  // Arduino legado: um numero ADC ou ! por linha, sem timestamps.
+  if FVersion=0 then
+  begin
+    if FLine='!' then begin ADC:=512; Lead:=1; end
+    else begin
+      if not Decimal(FLine,ADC) or (ADC>1023) then Exit;
+      Lead:=0;
+    end;
+    Inc(FLegacyCount);
+    Frame.TimestampUS:=FLegacyCount*5000;
+    Frame.ADC:=ADC;
+    Frame.LeadOff:=Lead=1;
+    Frame.Discontinuity:=FLegacyCount=1;
+    Result:=True;
+    Exit;
+  end;
   FPendingGap := True;
-  if FVersion=0 then Exit;
   P := Pos(',',FLine); if P=0 then Exit;
   Tail := Copy(FLine,P+1,Length(FLine)); Q := Pos(',',Tail); if Q=0 then Exit;
   if not Decimal(Copy(FLine,1,P-1),Seq) or not Decimal(Copy(Tail,1,Q-1),ADC)
@@ -75,7 +92,7 @@ begin
   begin
     HadGap := FPendingGap;
     if not FDiscard then Result := Parse(Frame);
-    if Result then Frame.Discontinuity := Frame.Discontinuity or HadGap;
+    if Result and (FVersion<>0) then Frame.Discontinuity := Frame.Discontinuity or HadGap;
     FLine := ''; FDiscard := False;
   end
   else if not FDiscard then
