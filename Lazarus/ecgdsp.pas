@@ -140,7 +140,7 @@ begin
   Result.IsPeak := False;
 
   if FHaveSample and ((ATimestampMs <= FLastSampleMs) or
-    (ATimestampMs-FLastSampleMs > 4)) then Reset;
+    (ATimestampMs-FLastSampleMs > Max(4, Round(3000.0/FSampleRate)))) then Reset;
   if ALeadsOff or (ARawValue<=1) or (ARawValue>=1022) then
   begin
     Reset;
