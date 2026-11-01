@@ -7,6 +7,7 @@ type
     TimestampUS: Int64;
     ADC: Integer;
     LeadOff, Discontinuity: Boolean;
+    IsLegacy: Boolean;
   end;
   TECGProtocol = class
   private
@@ -49,14 +50,18 @@ begin
   begin
     if FLine='!' then begin ADC:=512; Lead:=1; end
     else begin
-      if not Decimal(FLine,ADC) or (ADC>1023) then Exit;
+      if not Decimal(FLine,ADC) or (ADC>1023) then
+      begin FPendingGap:=True; Exit; end;
       Lead:=0;
     end;
     Inc(FLegacyCount);
-    Frame.TimestampUS:=FLegacyCount*5000;
+    // The legacy receiver assigns calibrated time.
+    Frame.TimestampUS:=0;
+    Frame.IsLegacy:=True;
     Frame.ADC:=ADC;
     Frame.LeadOff:=Lead=1;
-    Frame.Discontinuity:=FLegacyCount=1;
+    Frame.Discontinuity:=(FLegacyCount=1) or FPendingGap;
+    FPendingGap:=False;
     Result:=True;
     Exit;
   end;
@@ -79,6 +84,7 @@ begin
   end
   else FTime := FTime+2000;
   FPrevious := Seq; FHavePrevious := True;
+  Frame.IsLegacy := False;
   Frame.TimestampUS := FTime; Frame.ADC := ADC; Frame.LeadOff := Lead=1;
   FPendingGap := False;
   Result := True;

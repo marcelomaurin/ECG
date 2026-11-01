@@ -90,7 +90,8 @@ begin
     Database:=TECGDatabase.Create(ParamStr(1));
     try
       Database.Open; Check(Database.IsOpen,'SQLite open / migration');
-      Exam:=Database.StartExam('TEST','acquisition validation');
+      Exam:=Database.StartExam('TEST','acquisition validation',187.5);
+      Check(Abs(Database.GetExamSampleRate(Exam)-187.5)<0.001,'Fractional measured rate saved');
       for I:=0 to 2 do
       begin Batch[I]:=Default(TECGSample); Batch[I].TimestampUS:=I*2000; Batch[I].RawValue:=337; end;
       Database.InsertSamplesBatch(Exam,Batch,3);

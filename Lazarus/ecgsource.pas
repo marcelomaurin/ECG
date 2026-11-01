@@ -5,8 +5,8 @@
 interface
 
 uses
-  Classes, SysUtils, syncobjs,
-  serial, ecgtypes, ecgprotocol;
+  Classes, SysUtils, Math, syncobjs,
+  serial, ecgtypes, ecgprotocol, ecgcalibration;
 
 type
   { Tipos de Ritmo Simulados }
@@ -34,6 +34,7 @@ type
   { Estrutura Padronizada da Amostra (Hardware e Simulador) }
   TECGSample = record
     TimestampUS: Int64;
+    SampleRateHz: Double; // Rate attached to hardware samples, including queued batches.
     RawValue: Double;
     FilteredValue: Double;
     LeadOff: Boolean;
@@ -89,14 +90,24 @@ type
     FIsRunning: Boolean;
     FLock: TCriticalSection;
     FThread: TThread;
+    FParser: TECGProtocol;
+    FCalibration: TECGRateCalibration;
+    FClock: TECGSampleClock;
+    FClockReady, FHaveStream, FStreamLegacy: Boolean;
+    FSampleRate: Double;
+    FCalibrationText: String;
 
     FQueue: array[0..4095] of TECGSample;
     FQueueHead: Integer;
     FQueueTail: Integer;
 
     procedure PushSample(const S: TECGSample);
+    procedure ResetStream;
   public
     constructor Create(const APort: String; ABaud: Integer = 9600);
+    // Transport-independent receive entrypoint; NowMs must be monotonic.
+    // Only the serial worker calls it while running.
+    procedure ReceiveBytes(const Buffer: array of Byte; Count: Integer; NowMs: QWord);
     destructor Destroy; override;
 
     procedure Start;
@@ -197,33 +208,13 @@ end;
 procedure TSerialWorkerThread.Execute;
 var
   Buffer: array[0..255] of Byte;
-  BytesRead, I: Integer;
-  Parser: TECGProtocol;
-  Frame: TECGSerialFrame;
-  Sample: TECGSample;
+  BytesRead: Integer;
 begin
-  Parser := TECGProtocol.Create;
-  try
-    while not Terminated do
-    begin
-      BytesRead := SerReadTimeout(FOwner.FSerialHandle, Buffer, SizeOf(Buffer), 10);
-      if BytesRead > 0 then
-        for I := 0 to BytesRead-1 do
-          if Parser.Feed(Char(Buffer[I]), Frame) then
-          begin
-            Sample.TimestampUS := Frame.TimestampUS;
-            Sample.RawValue := Frame.ADC;
-            Sample.FilteredValue := 0;
-            Sample.LeadOff := Frame.LeadOff;
-            Sample.Discontinuity := Frame.Discontinuity;
-            Sample.SignalInvalid := Frame.LeadOff;
-            Sample.IsSimulated := False;
-            Sample.ExpectedClass := 'REAL'; Sample.ExpectedRhythm := 'REAL';
-            Sample.IsPeak := False;
-            FOwner.PushSample(Sample);
-          end;
-    end;
-  finally Parser.Free; end;
+  while not Terminated do
+  begin
+    BytesRead := SerReadTimeout(FOwner.FSerialHandle, Buffer, SizeOf(Buffer), 10);
+    FOwner.ReceiveBytes(Buffer, BytesRead, GetTickCount64);
+  end;
 end;
 
 { TSerialECGSource }
@@ -239,13 +230,104 @@ begin
   FQueueHead := 0;
   FQueueTail := 0;
   FThread := nil;
+  FCalibration := TECGRateCalibration.Create;
+  FClock := TECGSampleClock.Create;
+  ResetStream;
 end;
 
 destructor TSerialECGSource.Destroy;
 begin
   Stop;
+  FParser.Free; FCalibration.Free; FClock.Free;
   FLock.Free;
   inherited Destroy;
+end;
+
+procedure TSerialECGSource.ResetStream;
+begin
+  FreeAndNil(FParser);
+  FParser := TECGProtocol.Create;
+  FCalibration.Reset;
+  FClockReady := False; FHaveStream := False; FStreamLegacy := True;
+  FLock.Acquire;
+  try
+    FQueueHead := 0; FQueueTail := 0;
+    FSampleRate := 0; FCalibrationText := FCalibration.StatusText;
+  finally FLock.Release; end;
+end;
+
+procedure TSerialECGSource.ReceiveBytes(const Buffer: array of Byte; Count: Integer; NowMs: QWord);
+var
+  Frames: array[0..255] of TECGSerialFrame;
+  Frame: TECGSerialFrame;
+  Sample: TECGSample;
+  I, N, LegacyCount: Integer;
+  LeadOff, Gap, Mixed, WasReady, HadStream: Boolean;
+  Rate: Double;
+  Text: String;
+begin
+  N := 0; LegacyCount := 0; LeadOff := False; Gap := False; Mixed := False;
+  for I := 0 to Min(256, Min(Count, Length(Buffer)))-1 do
+    if FParser.Feed(Char(Buffer[I]), Frame) then
+    begin
+      HadStream := FHaveStream;
+      if FHaveStream and (FStreamLegacy <> Frame.IsLegacy) then
+      begin
+        FCalibration.Reset; FClockReady := False; Mixed := N > 0;
+        Frame.Discontinuity := True;
+      end;
+      FHaveStream := True; FStreamLegacy := Frame.IsLegacy;
+      Frames[N] := Frame; Inc(N);
+      if Frame.IsLegacy then
+      begin
+        Inc(LegacyCount);
+        LeadOff := LeadOff or Frame.LeadOff;
+        // First frame is a normal boundary, not a transport failure.
+        Gap := Gap or (Frame.Discontinuity and HadStream);
+      end;
+    end;
+  if FStreamLegacy or not FHaveStream then
+  begin
+    WasReady := FCalibration.Rate > 0;
+    FCalibration.Observe(NowMs, LegacyCount, LeadOff, Gap or Mixed);
+    Rate := FCalibration.Rate; Text := FCalibration.StatusText;
+    if (Rate = 0) or not WasReady then
+    begin
+      FClockReady := False;
+      N := 0; // Calibration frames never enter DSP, recording or BPM.
+    end;
+  end
+  else
+  begin
+    Rate := 500; Text := 'Protocolo com timestamps: 500 Hz';
+    if Mixed then N := 0;
+  end;
+  FLock.Acquire;
+  try
+    FSampleRate := Rate; FCalibrationText := Text;
+    if Rate = 0 then begin FQueueHead := 0; FQueueTail := 0; end;
+  finally FLock.Release; end;
+  for I := 0 to N-1 do
+  begin
+    Sample := Default(TECGSample);
+    Sample.SampleRateHz := Rate;
+    if Frames[I].IsLegacy then
+    begin
+      if not FClockReady then
+      begin
+        FClock.Start(Int64(NowMs)*1000, Rate);
+        Frames[I].Discontinuity := True; FClockReady := True;
+      end;
+      Sample.TimestampUS := FClock.Next;
+    end
+    else Sample.TimestampUS := Frames[I].TimestampUS;
+    Sample.RawValue := Frames[I].ADC;
+    Sample.LeadOff := Frames[I].LeadOff;
+    Sample.Discontinuity := Frames[I].Discontinuity;
+    Sample.SignalInvalid := Sample.LeadOff;
+    Sample.ExpectedClass := 'REAL'; Sample.ExpectedRhythm := 'REAL';
+    PushSample(Sample);
+  end;
 end;
 
 procedure TSerialECGSource.PushSample(const S: TECGSample);
@@ -277,6 +359,7 @@ var
   CleanPort: String;
 begin
   if FIsRunning then Exit;
+  ResetStream;
 
   CleanPort := Trim(FPortName);
   {$IFDEF MSWINDOWS}
@@ -355,12 +438,16 @@ end;
 
 function TSerialECGSource.GetSampleRate: Double;
 begin
-  Result := 200.0; // estimativa nominal: firmware antigo nao transmite timestamps
+  FLock.Acquire;
+  try Result := FSampleRate; finally FLock.Release; end;
 end;
 
 function TSerialECGSource.GetDescription: String;
 begin
-  Result := 'Hardware Serial AD8232 (' + FPortName + ' @ ' + IntToStr(FBaudRate) + ' bps)';
+  FLock.Acquire;
+  try
+    Result := 'Serial ' + FPortName + ' @ ' + IntToStr(FBaudRate) + ' | ' + FCalibrationText;
+  finally FLock.Release; end;
 end;
 
 function TSerialECGSource.IsHardware: Boolean;

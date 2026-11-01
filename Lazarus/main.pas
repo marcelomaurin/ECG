@@ -170,6 +170,8 @@ type
 
     // Estado da varredura em tempo real
     FXPos: Integer;
+    FPlotOriginUS: Int64;
+    FHavePlot: Boolean;
     FLastY: Integer;
     FGain: Double;
     FUpdatingSimControls: Boolean;
@@ -187,6 +189,7 @@ type
     FRecordedRhythm: TECGRhythmType;
     FRecordedSamples: array[0..9999] of Double;
     FRecordedCount: Integer;
+    FRecordedRate: Double;
     FRecordedQualityOK: Boolean;
 
     // Eventos detectados pelo YOLO 1D
@@ -267,6 +270,7 @@ begin
   FIsRecording := False;
   FRecordedExamId := 0;
   FRecordedCount := 0;
+  FRecordedRate := 500;
 
   FXPos := 0;
   FLastY := 0;
@@ -588,7 +592,7 @@ begin
   begin
     FBackBuffer.SetSize(W, H);
     DrawGrid(FBackBuffer.Canvas, W, H);
-    FXPos := 0;
+    FXPos := 0; FHavePlot := False;
     FLastY := H div 2;
   end;
 end;
@@ -664,7 +668,8 @@ begin
     Baud := StrToIntDef(cboBaudHw.Text, 9600);
     FCurrentSource := TSerialECGSource.Create(Port, Baud);
     FreeAndNil(FDSP);
-    FDSP := TECGProcessor.Create(200.0);
+    // No hardware sample is processed until the receiver has measured its rate.
+    FDSP := TECGProcessor.Create(500.0);
     FDSP.EnableNotch := FNotchBox.Checked;
   end
   else
@@ -683,6 +688,8 @@ begin
     Exit;
   end;
   FLastSampleTick := GetTickCount64;
+  FHavePlot := False;
+  DrawGrid(FBackBuffer.Canvas, FBackBuffer.Width, FBackBuffer.Height);
   TimerUI.Enabled := True;
 
   if rbSourceHardware.Checked then
@@ -698,7 +705,7 @@ begin
 
   lblSourceDesc.Caption := 'Fonte: ' + FCurrentSource.GetDescription;
   if FCurrentSource.IsHardware then
-      StatusBar1.Panels[0].Text := 'Hardware serial: taxa nominal 200 Hz (nao medida)'
+      StatusBar1.Panels[0].Text := 'Calibrando taxa serial: aguarde 8 s de dados estaveis'
     else
       StatusBar1.Panels[0].Text := 'Simulacao: 500 Hz';
   StatusBar1.Panels[1].Text := FCurrentSource.GetDescription;
@@ -731,9 +738,18 @@ end;
 
 procedure TMainForm.DrawECGSample(const ASample: TECGSample; AIsPeak: Boolean);
 var
-  CenterY, TargetY, EraseWidth, EraseX: Integer;
+  CenterY, TargetY, EraseWidth, EraseX, PreviousX: Integer;
 begin
   CenterY := FBackBuffer.Height div 2;
+  PreviousX := FXPos;
+  if not FHavePlot or ASample.Discontinuity then
+  begin
+    FPlotOriginUS := ASample.TimestampUS;
+    FHavePlot := True; PreviousX := -1;
+    DrawGrid(FBackBuffer.Canvas, FBackBuffer.Width, FBackBuffer.Height);
+  end;
+  // 250 pixels/s: each major 50-pixel square is 200 ms at every sample rate.
+  FXPos := Trunc((ASample.TimestampUS-FPlotOriginUS) * 250.0 / 1000000.0) mod FBackBuffer.Width;
 
   if ASample.LeadOff then
     TargetY := CenterY
@@ -773,8 +789,8 @@ begin
 
   FBackBuffer.Canvas.Pen.Width := 2;
 
-  if FXPos > 0 then
-    FBackBuffer.Canvas.Line(FXPos - 1, FLastY, FXPos, TargetY)
+  if (PreviousX >= 0) and (FXPos >= PreviousX) then
+    FBackBuffer.Canvas.Line(PreviousX, FLastY, FXPos, TargetY)
   else
     FBackBuffer.Canvas.Pixels[FXPos, TargetY] := COLOR_ECG_TRACE;
 
@@ -786,9 +802,7 @@ begin
   end;
 
   FLastY := TargetY;
-  Inc(FXPos);
-  if FXPos >= FBackBuffer.Width then
-    FXPos := 0;
+
 end;
 
 procedure TMainForm.TimerUITimer(Sender: TObject);
@@ -802,6 +816,11 @@ var
 begin
   if FCurrentSource = nil then Exit;
 
+  if FCurrentSource.IsHardware and (FCurrentSource.GetSampleRate = 0) then
+  begin
+    FDSP.Reset; FHavePlot := False;
+    if FIsRecording then FRecordedQualityOK := False;
+  end;
   Count := FCurrentSource.ReadAllSamples(SamplesBuffer);
   if Count > 0 then
   begin
@@ -809,6 +828,15 @@ begin
     for I := 0 to Count - 1 do
     begin
       // Processa pelo pipeline unificado de DSP (Filtros passa-alta, passa-baixa, remocao 60Hz, deteccao QRS)
+      if FCurrentSource.IsHardware and
+         (Abs(FDSP.SampleRate-SamplesBuffer[I].SampleRateHz) > 0.001) then
+      begin
+        FreeAndNil(FDSP);
+        FDSP := TECGProcessor.Create(SamplesBuffer[I].SampleRateHz);
+        FDSP.EnableNotch := FNotchBox.Checked;
+        FHavePlot := False;
+        if FIsRecording then FRecordedQualityOK := False;
+      end;
       if SamplesBuffer[I].Discontinuity then FDSP.Reset;
       Rec := FDSP.ProcessSample(SamplesBuffer[I].RawValue, SamplesBuffer[I].TimestampUS div 1000, SamplesBuffer[I].LeadOff);
       // VF has no organized QRS. Do not display threshold crossings as R peaks.
@@ -857,7 +885,7 @@ begin
     pbRecordProgress.Position := Pct;
     lblRecordStatus.Caption := Format('Gravando no SQLite: %.1fs / 10.0s (%d amostras)', [ElapsedSec, FRecordedCount]);
 
-    // Ao atingir 10 segundos (5000 amostras a 500 Hz), finaliza automaticamente
+    // Finaliza apos 10 segundos, independentemente da taxa calibrada.
     if ElapsedSec >= 10.0 then
     begin
       StopRecording;
@@ -885,6 +913,21 @@ begin
   Stats := FDSP.GetCurrentStats;
   if (FCurrentSource <> nil) and FCurrentSource.IsRunning then
   begin
+    StatusBar1.Panels[1].Text := FCurrentSource.GetDescription;
+    StatusBar1.Panels[0].Text := 'Grade: 200 ms / quadrado';
+    if FCurrentSource.IsHardware then
+    begin
+      if FCurrentSource.GetSampleRate = 0 then
+      begin
+        lblSourceDesc.Caption := 'Calibrando taxa serial...';
+        lblBPMValue2.Caption := '--';
+        lblBPMValue2.Font.Color := clYellow;
+        lblHeartStatus2.Caption := 'Calibrando / confira eletrodos';
+        Exit;
+      end;
+      lblSourceDesc.Caption := Format('Taxa estimada: %.2f Hz', [FCurrentSource.GetSampleRate]);
+    end
+    else lblSourceDesc.Caption := 'Simulacao: 500 Hz';
     if not FCurrentSource.IsHardware and (FSimParams.RhythmType = rtVentricularFibrillation) then
     begin
       lblBPMValue2.Caption := '--';
@@ -908,7 +951,7 @@ begin
       else lblHeartStatus2.Caption := 'Aguardando batimentos...';
       lblBPMValue2.Font.Color := clYellow;
     end;
-    StatusBar1.Panels[0].Text := 'Status: Aquisicao Ativa (500 Hz)';
+
   end
   else
   begin
@@ -1025,16 +1068,17 @@ begin
   if (FCurrentSource = nil) or not FCurrentSource.IsRunning then
     StartAcquisition;
   if (FCurrentSource=nil) or not FCurrentSource.IsRunning then Exit;
-  if not FDSP.SignalValid then
+  if not FDSP.SignalValid or (FCurrentSource.GetSampleRate <= 0) then
   begin
-    ShowMessage('Aguarde dois segundos de sinal continuo e estavel antes de gravar.');
+    ShowMessage('Aguarde a calibracao serial e dois segundos de sinal continuo antes de gravar.');
     Exit;
   end;
 
   PatientName := Trim(edtPatient.Text);
   if PatientName = '' then PatientName := 'Paciente Anonimo';
 
-  FRecordedExamId := FDatabase.StartExam(PatientName, 'Aquisicao 500 Hz (' + FCurrentSource.GetDescription + ')');
+  FRecordedRate := FCurrentSource.GetSampleRate;
+  FRecordedExamId := FDatabase.StartExam(PatientName, FCurrentSource.GetDescription, FRecordedRate);
   FRecordedIsSimulated := not FCurrentSource.IsHardware;
   FRecordedRhythm := FSimParams.RhythmType;
   FRecordedCount := 0;
@@ -1078,6 +1122,7 @@ var
 begin
   if AExamId > 0 then
   begin
+      FRecordedRate := FDatabase.GetExamSampleRate(AExamId);
       if FDatabase.LoadExamSamples(AExamId, FRecordedSamples, Count) then
         FRecordedCount := Count
       else
@@ -1089,7 +1134,7 @@ begin
   end;
 
   lblExamInfo.Caption := Format('Exame #%d | Paciente: %s | Janela: %.1fs (%d amostras) | SQLite', [
-    FRecordedExamId, edtPatient.Text, (FRecordedCount / 500.0), FRecordedCount
+    FRecordedExamId, edtPatient.Text, (FRecordedCount / FRecordedRate), FRecordedCount
   ]);
 
   btnRunYOLOClick(nil);
@@ -1122,7 +1167,7 @@ begin
     lblArrhythmiaVal.Caption := 'Classificacao deste ritmo ainda nao implementada';
     Exit;
   end;
-  FYOLOEvents := TYOLO1DDetector.DetectEvents(FRecordedSamples, FRecordedCount, 500.0);
+  FYOLOEvents := TYOLO1DDetector.DetectEvents(FRecordedSamples, FRecordedCount, FRecordedRate);
   FYOLOSummary := TYOLO1DDetector.CalculateSummary(FYOLOEvents);
 
   DrawAnalysisWaveform;
@@ -1149,6 +1194,12 @@ begin
   if not FRecordedQualityOK then
   begin
     ShowMessage('Gravacao sem janela valida para analise. Repita a aquisicao.');
+    Exit;
+  end;
+  // The external model still requires a uniform 500 Hz input.
+  if Abs(FRecordedRate-500)>0.001 then
+  begin
+    ShowMessage('Analise Python requer 500 Hz. Use o detector Lazarus para este exame com taxa calibrada.');
     Exit;
   end;
   PythonExe := 'python';
@@ -1259,7 +1310,7 @@ begin
   DrawGrid(FAnalysisBuffer.Canvas, W, H);
   if FRecordedCount < 10 then Exit;
 
-  TotalDurationSec := FRecordedCount / 500.0;
+  TotalDurationSec := FRecordedCount / FRecordedRate;
   if TotalDurationSec <= 0 then TotalDurationSec := 10.0;
   SecPerPixel := TotalDurationSec / W;
   SamplePerPixel := FRecordedCount / W;
@@ -1368,7 +1419,7 @@ begin
     Lines := TStringList.Create;
     try
       Lines.Add('#algoritmo=YOLO-1D-ECG');
-      Lines.Add('#sample_rate=500');
+      Lines.Add('#sample_rate=' + FloatToStr(FRecordedRate, DefaultFormatSettings));
       Lines.Add('id;start_s;end_s;duration_ms;class_code;class_name;confidence');
       for I := 0 to FYOLOEvents.Count - 1 do
       begin

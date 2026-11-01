@@ -1,4 +1,4 @@
-﻿object MainForm: TMainForm
+object MainForm: TMainForm
   Left = 140
   Height = 750
   Top = 70
@@ -1160,15 +1160,15 @@
     Panels = <    
       item
         Text = 'Status: Ocioso'
-        Width = 200
+        Width = 180
       end    
       item
         Text = 'Modo: Simulador Didatico'
-        Width = 240
+        Width = 750
       end    
       item
         Text = 'Banco: SQLite Conectado'
-        Width = 220
+        Width = 180
       end    
       item
         Text = 'Maurinsoft ECG Analyzer'

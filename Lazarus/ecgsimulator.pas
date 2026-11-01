@@ -269,6 +269,7 @@ begin
     Sec := FTotalSamplesGenerated / ECG_SAMPLE_RATE;
     TimeMs := FTotalSamplesGenerated * 2.0;
     Result.TimestampUS := FTotalSamplesGenerated * 2000;
+    Result.SampleRateHz := ECG_SAMPLE_RATE;
     Result.ExpectedRhythm := RhythmTypeToCode(FParams.RhythmType);
     Result.IsSimulated := True;
     Result.LeadOff := False;
