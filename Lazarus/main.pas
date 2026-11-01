@@ -661,12 +661,18 @@ begin
       ShowMessage('Selecione uma porta COM valida para conectar ao Arduino.');
       Exit;
     end;
-    Baud := StrToIntDef(cboBaudHw.Text, 115200);
+    Baud := StrToIntDef(cboBaudHw.Text, 9600);
     FCurrentSource := TSerialECGSource.Create(Port, Baud);
+    FreeAndNil(FDSP);
+    FDSP := TECGProcessor.Create(200.0);
+    FDSP.EnableNotch := FNotchBox.Checked;
   end
   else
   begin
     FCurrentSource := TSimulatedECGSource.Create(FSimParams);
+    FreeAndNil(FDSP);
+    FDSP := TECGProcessor.Create(500.0);
+    FDSP.EnableNotch := FNotchBox.Checked;
   end;
 
   FCurrentSource.Start;
@@ -691,7 +697,10 @@ begin
   end;
 
   lblSourceDesc.Caption := 'Fonte: ' + FCurrentSource.GetDescription;
-  StatusBar1.Panels[0].Text := 'Status: Aquisicao Ativa (500 Hz)';
+  if FCurrentSource.IsHardware then
+      StatusBar1.Panels[0].Text := 'Hardware serial: taxa nominal 200 Hz (nao medida)'
+    else
+      StatusBar1.Panels[0].Text := 'Simulacao: 500 Hz';
   StatusBar1.Panels[1].Text := FCurrentSource.GetDescription;
   UpdateGroundTruthUI;
 end;
