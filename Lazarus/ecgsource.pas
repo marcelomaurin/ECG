@@ -96,7 +96,7 @@ type
 
     procedure PushSample(const S: TECGSample);
   public
-    constructor Create(const APort: String; ABaud: Integer = 115200);
+    constructor Create(const APort: String; ABaud: Integer = 9600);
     destructor Destroy; override;
 
     procedure Start;
@@ -273,7 +273,6 @@ begin
 end;
 
 procedure TSerialECGSource.Start;
-const Query: array[0..1] of Char = ('?', #10);
 var
   CleanPort: String;
 begin
@@ -289,7 +288,6 @@ begin
   if FSerialHandle > 0 then
   begin
     SerSetParams(FSerialHandle, FBaudRate, 8, NoneParity, 1, []);
-    SerWrite(FSerialHandle, Query, SizeOf(Query));
     FIsRunning := True;
     FThread := TSerialWorkerThread.Create(Self);
     FThread.Start;
@@ -357,7 +355,7 @@ end;
 
 function TSerialECGSource.GetSampleRate: Double;
 begin
-  Result := 500.0;
+  Result := 200.0; // estimativa nominal: firmware antigo nao transmite timestamps
 end;
 
 function TSerialECGSource.GetDescription: String;
