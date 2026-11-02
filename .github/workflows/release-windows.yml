@@ -1,0 +1,54 @@
+name: Build ECGMonitor Windows
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version X.Y.Z"
+        required: true
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ECG
+      - uses: actions/checkout@v4
+        with:
+          repository: marcelomaurin/CHATGPT
+          path: CHATGPT
+      - name: Install tools
+        run: choco install lazarus innosetup -y --no-progress
+      - name: Build and package
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid version' }
+          $laz = Get-ChildItem C:\ -Filter lazbuild.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $laz) { throw 'lazbuild not found' }
+          & $laz --build-all ECG/Lazarus/ECGMonitor.lpi
+          if ($LASTEXITCODE -ne 0) { throw 'Lazarus build failed' }
+          $iscc = Get-ChildItem 'C:\Program Files (x86)' -Filter ISCC.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $iscc) { throw 'Inno Setup missing' }
+          $root = (Resolve-Path ECG).Path
+          $dest = Join-Path $root release
+          New-Item -Type Directory -Force $dest | Out-Null
+          & $iscc "/DAppVersion=$env:RELEASE_VERSION" "/DRepoRoot=$root" "/DOutputDir=$dest" "ECG/installer_ci.iss"
+          if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
+          $setup = Join-Path $dest ("ECGMonitor_v" + $env:RELEASE_VERSION + "_Setup.exe")
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Encoding ASCII (Join-Path $dest SHA256SUMS.txt) ($hash + "  " + [IO.Path]::GetFileName($setup))
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ECGMonitor-installation
+          path: ECG/release/*
+      - name: Publish Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          $tag = 'v' + $env:RELEASE_VERSION
+          gh release create $tag ECG/release/* --title "ECGMonitor $tag" --generate-notes
