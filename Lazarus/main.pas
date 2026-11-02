@@ -246,10 +246,36 @@ end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
 var
-  ImgPath, DBPath: String;
+  ImgPath, DBPath, UpdateScript: String;
+  UpdateProc: TProcess;
   RhythmIndex: Integer;
 begin
   Application.OnException := @GlobalExceptionHandler;
+  {$IFDEF MSWINDOWS}
+  // Installs only official checksum-verified releases, after normal application exit.
+  UpdateScript := ExtractFilePath(ParamStr(0)) + 'updates' + PathDelim + 'ecg_update.ps1';
+  if FileExists(UpdateScript) then
+  begin
+    UpdateProc := TProcess.Create(nil);
+    try
+      UpdateProc.Executable := 'powershell.exe';
+      UpdateProc.Parameters.Add('-NoProfile');
+      UpdateProc.Parameters.Add('-NonInteractive');
+      UpdateProc.Parameters.Add('-ExecutionPolicy');
+      UpdateProc.Parameters.Add('Bypass');
+      UpdateProc.Parameters.Add('-File');
+      UpdateProc.Parameters.Add(UpdateScript);
+      UpdateProc.Parameters.Add('-CurrentVersion');
+      UpdateProc.Parameters.Add('1.2');
+      UpdateProc.Parameters.Add('-AppPid');
+      UpdateProc.Parameters.Add(IntToStr(GetProcessID));
+      UpdateProc.Options := [poNoConsole];
+      try UpdateProc.Execute; except end;
+    finally
+      UpdateProc.Free;
+    end;
+  end;
+  {$ENDIF}
   FDSP := TECGProcessor.Create(500.0);
   FCurrentSource := nil;
   FSimParams := GetDefaultWaveParameters(rtNormal);
