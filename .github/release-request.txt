@@ -1,2 +1,2 @@
 1.3.0
-Solicitacao de build e publicacao para Windows. O workflow deve compilar e publicar somente apos sucesso.
+Reexecutar build apos correcao do comando gh release create com --repo. Solicitacao 2.
