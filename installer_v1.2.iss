@@ -33,6 +33,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "D:\projetos\maurinsoft\ECG\Lazarus\ECGMonitor.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "D:\projetos\maurinsoft\ECG\Lazarus\updates\ecg_update.ps1"; DestDir: "{app}\updates"; Flags: ignoreversion
 Source: "D:\projetos\maurinsoft\ECG\Lazarus\sqlite3.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "D:\projetos\maurinsoft\ECG\Lazarus\img\*"; DestDir: "{app}\img"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "D:\projetos\maurinsoft\ECG\models\*"; DestDir: "{app}\models"; Flags: ignoreversion recursesubdirs createallsubdirs
