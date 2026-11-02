@@ -1,5 +1,8 @@
 name: Build ECGMonitor Windows
 on:
+  push:
+    branches: [main]
+    paths: ['.github/release-request.txt']
   workflow_dispatch:
     inputs:
       version:
@@ -23,7 +26,7 @@ jobs:
       - name: Build and package
         shell: pwsh
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION: ${{ inputs.version || '1.3.0' }}
         run: |
           if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid version' }
           $laz = Get-ChildItem C:\ -Filter lazbuild.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
@@ -53,7 +56,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION: ${{ inputs.version || '1.3.0' }}
         run: |
           $tag = 'v' + $env:RELEASE_VERSION
           gh release create $tag "ECG/release/ECGMonitor_v${env:RELEASE_VERSION}_Setup.exe" "ECG/release/SHA256SUMS.txt" --title "ECGMonitor $tag" --generate-notes
