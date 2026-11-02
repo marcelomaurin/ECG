@@ -28,6 +28,11 @@ jobs:
           if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid version' }
           $laz = Get-ChildItem C:\ -Filter lazbuild.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
           if (-not $laz) { throw 'lazbuild not found' }
+          # Set the actual packaged app version before compilation (avoid reinstall loop).
+          $mainPath = 'ECG/Lazarus/main.pas'
+          $code = Get-Content -LiteralPath $mainPath -Raw
+          $code = $code.Replace("UpdateProc.Parameters.Add('1.2');", "UpdateProc.Parameters.Add('$env:RELEASE_VERSION');")
+          Set-Content -LiteralPath $mainPath -Value $code -Encoding UTF8
           & $laz --build-all ECG/Lazarus/ECGMonitor.lpi
           if ($LASTEXITCODE -ne 0) { throw 'Lazarus build failed' }
           $iscc = Get-ChildItem 'C:\Program Files (x86)' -Filter ISCC.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
@@ -51,4 +56,4 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
           $tag = 'v' + $env:RELEASE_VERSION
-          gh release create $tag ECG/release/* --title "ECGMonitor $tag" --generate-notes
+          gh release create $tag "ECG/release/ECGMonitor_v${env:RELEASE_VERSION}_Setup.exe" "ECG/release/SHA256SUMS.txt" --title "ECGMonitor $tag" --generate-notes
