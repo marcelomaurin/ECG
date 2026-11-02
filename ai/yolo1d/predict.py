@@ -58,22 +58,45 @@ def load_model(weights_path=None):
     return model
 
 
+def resample_for_model(signal, sample_rate, target_rate=500.0, seconds=10.0):
+    """Reamostra janela uniforme do exame para o modelo de 500 Hz."""
+    if not np.isfinite(sample_rate) or sample_rate <= 0:
+        raise ValueError("Taxa de aquisicao invalida")
+    signal = np.asarray(signal, dtype=np.float32)
+    if not np.all(np.isfinite(signal)):
+        raise ValueError("Amostras invalidas")
+    count = min(len(signal), int(round(sample_rate * seconds)))
+    if count < sample_rate * seconds * 0.95:
+        raise ValueError("Exame com duracao insuficiente para inferencia")
+    source_t = np.arange(count, dtype=np.float64) / sample_rate
+    target_t = np.arange(int(round(target_rate * seconds)), dtype=np.float64) / target_rate
+    return np.interp(target_t, source_t, signal[:count]).astype(np.float32)
+
+
 def read_exam_from_sqlite(db_path, exam_id):
     """Le as amostras de um exame armazenadas no banco SQLite."""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
+    cursor.execute("SELECT taxa_amostragem FROM exames WHERE id = ?", (exam_id,))
+    metadata = cursor.fetchone()
+    if not metadata:
+        conn.close()
+        raise ValueError("Exame nao encontrado")
+    rate = float(metadata[0])
     cursor.execute(
-        "SELECT filtered_val FROM amostras WHERE exame_id = ? ORDER BY timestamp_us ASC",
+        """SELECT filtered_val, lead_off, signal_invalid, discontinuity
+           FROM amostras WHERE exame_id = ? ORDER BY id ASC""",
         (exam_id,)
     )
     rows = cursor.fetchall()
     conn.close()
-
     if not rows:
-        return np.array([], dtype=np.float32)
+        raise ValueError("Exame sem dados")
+    if any(lead or invalid or gap for _, lead, invalid, gap in rows):
+        raise ValueError("Exame possui amostra invalida, desconexao ou descontinuidade")
+    signal = np.asarray([row[0] for row in rows], dtype=np.float32)
+    return resample_for_model(signal, rate)
 
-    signal = np.array([r[0] for r in rows], dtype=np.float32)
-    return signal
 
 
 # ==============================================================================
