@@ -1,4 +1,4 @@
-﻿# Maurinsoft ECG Monitor (Lazarus / Free Pascal)
+# Maurinsoft ECG Monitor (Lazarus / Free Pascal)
 
 Aplicação desktop profissional para monitoramento, filtragem digital de sinais (DSP), detecção de complexo QRS/BPM e telemetria inteligente de eletrocardiograma (ECG), baseada no sensor analógico **AD8232** com Arduino.
 
@@ -53,3 +53,8 @@ Este projeto foi construído integrado à suíte de componentes do projeto **[CH
    ```cmd
    C:\lazarus\lazbuild.exe D:\projetos\maurinsoft\ECG\Lazarus\ECGMonitor.lpi
    ```
+
+
+## Calibracao serial automatica
+
+A conexao com firmware legado a 9600 baud mede a taxa efetiva antes de liberar o DSP, o BPM e a gravacao. Veja [Calibracao no Lazarus](../docs/CALIBRACAO_LAZARUS.md) para o procedimento, os limites e os testes.

@@ -27,7 +27,8 @@ type
     procedure Open;
     procedure Close;
 
-    function StartExam(const APaciente: String = 'Anonimo'; const ANotas: String = ''): Int64;
+    function StartExam(const APaciente: String = 'Anonimo'; const ANotas: String = ''; ASampleRate: Double = 500.0): Int64;
+    function GetExamSampleRate(const AExamId: Int64): Double;
     procedure FinishExam(const AExamId: Int64; const ADuracaoSeg: Double; const ABpmMedio: Double);
 
     procedure InsertSamplesBatch(const AExamId: Int64; const ASamples: array of TECGSample; ACount: Integer);
@@ -116,7 +117,7 @@ begin
     'CREATE TABLE IF NOT EXISTS exames (' +
     '  id INTEGER PRIMARY KEY AUTOINCREMENT,' +
     '  data_hora TEXT NOT NULL,' +
-    '  taxa_amostragem INTEGER DEFAULT 500,' +
+    '  taxa_amostragem REAL DEFAULT 500,' +
     '  duracao_seg REAL DEFAULT 0.0,' +
     '  paciente TEXT,' +
     '  notas TEXT,' +
@@ -173,7 +174,7 @@ begin
   try FConn.ExecuteDirect('PRAGMA synchronous = NORMAL;'); except end;
 end;
 
-function TECGDatabase.StartExam(const APaciente: String; const ANotas: String): Int64;
+function TECGDatabase.StartExam(const APaciente: String; const ANotas: String; ASampleRate: Double): Int64;
 var
   Q: TSQLQuery;
   DataHoraStr: String;
@@ -194,7 +195,8 @@ begin
         Q.DataBase := FConn;
         Q.Transaction := FTrans;
         Q.SQL.Text := 'INSERT INTO exames (data_hora, taxa_amostragem, paciente, notas) ' +
-                      'VALUES (:data_hora, 500, :paciente, :notas);';
+                      'VALUES (:data_hora, :rate, :paciente, :notas);';
+        Q.Params.ParamByName('rate').AsFloat := ASampleRate;
         Q.Params.ParamByName('data_hora').AsString := DataHoraStr;
         Q.Params.ParamByName('paciente').AsString := APaciente;
         Q.Params.ParamByName('notas').AsString := ANotas;
@@ -221,6 +223,23 @@ begin
   finally
     FLock.Release;
   end;
+end;
+
+function TECGDatabase.GetExamSampleRate(const AExamId: Int64): Double;
+var Q: TSQLQuery;
+begin
+  Result := 500;
+  if not FIsOpen then Exit;
+  FLock.Acquire;
+  Q := TSQLQuery.Create(nil);
+  try
+    Q.DataBase := FConn; Q.Transaction := FTrans;
+    Q.SQL.Text := 'SELECT taxa_amostragem FROM exames WHERE id = :id';
+    Q.Params.ParamByName('id').AsLargeInt := AExamId;
+    Q.Open;
+    if not Q.EOF and (Q.Fields[0].AsFloat > 0) then Result := Q.Fields[0].AsFloat;
+    Q.Close;
+  finally Q.Free; FLock.Release; end;
 end;
 
 procedure TECGDatabase.FinishExam(const AExamId: Int64; const ADuracaoSeg: Double; const ABpmMedio: Double);
