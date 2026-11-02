@@ -1196,10 +1196,10 @@ begin
     ShowMessage('Gravacao sem janela valida para analise. Repita a aquisicao.');
     Exit;
   end;
-  // The external model still requires a uniform 500 Hz input.
-  if Abs(FRecordedRate-500)>0.001 then
+  // O Python converte a taxa calibrada para a grade de 500 Hz do modelo.
+  if FRecordedRate<=0 then
   begin
-    ShowMessage('Analise Python requer 500 Hz. Use o detector Lazarus para este exame com taxa calibrada.');
+    ShowMessage('Calibracao da taxa indisponivel. Repita a aquisicao.');
     Exit;
   end;
   PythonExe := 'python';
