@@ -59,4 +59,4 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version || '1.3.0' }}
         run: |
           $tag = 'v' + $env:RELEASE_VERSION
-          gh release create $tag "ECG/release/ECGMonitor_v${env:RELEASE_VERSION}_Setup.exe" "ECG/release/SHA256SUMS.txt" --title "ECGMonitor $tag" --generate-notes
+          gh release create $tag "ECG/release/ECGMonitor_v${env:RELEASE_VERSION}_Setup.exe" "ECG/release/SHA256SUMS.txt" --title "ECGMonitor $tag" --generate-notes --repo "${{ github.repository }}" --target main
